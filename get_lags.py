@@ -516,7 +516,7 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
 
 
 ################################################################################
-def main(in_file, out_file, energies_tab, plot_root, prefix, plot_ext="eps",
+def main(in_file, out_file, energies_file, plot_root, prefix, plot_ext="eps",
         lo_freq=1.0, up_freq=10.0, lo_energy=2, up_energy=26):
     """
     Computes the phase lag and time lag from the average cross spectrum. Note
@@ -524,6 +524,8 @@ def main(in_file, out_file, energies_tab, plot_root, prefix, plot_ext="eps",
     noise subtracted.
 
     """
+
+    energies_tab = np.loadtxt(energies_file)
 
     ## Get necessary information and data from the input file
     freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans, n_seconds, \
