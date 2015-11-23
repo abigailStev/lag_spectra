@@ -4,10 +4,15 @@ series. The cross spectra and power spectra are read in as a FITS file.
 
 ## Contents
 
+### covariance_spectrum.py
+Computes the covariance spectrum. See Uttley et al 2014 section 2 for the
+relevant equations and physical explanation.
+
 ### get_lags.py
 Computes the phase lag and time lag of bands of interest with a 
 reference energy band from the average cross spectrum. Can average over 
-frequency and over energy.
+frequency and over energy. See Uttley et al 2014 section 2 for the relevant 
+equations and physical explanations.
 
 Currently (09 Apr 2015) seems to be off by a factor of 2?
 Saw this line in Nov 2015 -- don't think it is anymore.
@@ -17,10 +22,16 @@ Plots multiple lag-energy spectra (from different observations, simulations,
 etc.) on the same plot.
 
 
-## Authors and License
+## Authors
 * Abigail Stevens (UvA API)
 
 Pull requests are welcome!
+
+## Collaborators
+* Phil Uttley (UvA API)
+* Federico Vincentelli (INAF Roma, INAF Brera)
+
+## License
 
 All code is Copyright 2015 The Authors, and is distributed under the MIT 
 Licence. See LICENSE for details. If you are interested in the further 
