@@ -9,7 +9,7 @@ is in extension 1, power spectrum of interest bands are in extension 2, and
 power spectrum of reference band is in extension 3.
 
 Example call:
-python get_lags.py ./cygx1_cs.fits ./cygx1_lags.fits ./cygx1_chan_energies.txt
+python get_lags.py ./cygx1_cs.fits ./cygx1_lags.fits ./cygx1_energies.txt
 
 Enter   python get_lags.py -h   at the command line for help.
 
@@ -41,6 +41,44 @@ def get_inputs(in_file):
     2-D arrays of cross spectrum and interest bands were flattened (and are
     reshaped here)'C-style'.
 
+    Parameters
+    ----------
+    in_file : str
+        The file "*_cs.fits" from cross_correlation/ccf.py. Has constants for
+        meta_dict in ext 0, cross spectrum in ext 1, power of chans of interest
+        in ext 2, and power of reference band in ext 3.
+
+    Returns
+    -------
+    freq : np.array of floats
+        1-D array of the Fourier frequencies of the cross spectrum, in Hz.
+
+    cs_avg : np.array of complex numbers
+        2-D array of the cross spectrum. Should be un-normalized and not noise-
+        subtracted. Size = (n_bins, detchans).
+
+    power_ci : np.array of floats
+        2-D array of the power in the channels of interest. Should be un-
+        normalized and not noise-subtracted. Size = (n_bins, detchans).
+
+    power_ref : np.array of floats
+        1-D array of the power in the reference band. Should be un-normalized
+        and not noise-subtracted. Size = (n_bins).
+
+    meta_dict : dict
+        Dictionary of meta-parameters needed for analysis.
+
+    rate_ci : np.array of floats
+        1-D array of the background-subtracted mean count rate in each energy
+        channel, in cts/s.
+
+    rate_ref : float
+        Mean count rate in the reference band, in cts/s.
+
+    evt_list : str
+        The name of the event list(s) where the original data came from, to
+        write to the FITS header of the output file.
+
     """
     try:
         fits_hdu = fits.open(in_file)
@@ -49,41 +87,43 @@ def get_inputs(in_file):
         exit()
 
     evt_list = fits_hdu[0].header['EVTLIST']
-    dt = float(fits_hdu[0].header['DT'])
-    n_bins = int(fits_hdu[0].header['N_BINS'])
-    n_seg = int(fits_hdu[0].header['SEGMENTS'])
-    exposure = float(fits_hdu[0].header['EXPOSURE'])
-    detchans = int(
-        fits_hdu[0].header['DETCHANS'])  # == number of interest bands
-    rate_ci = np.asarray(fits_hdu[0].header['RATE_CI'])
+
+    meta_dict = {'dt': float(fits_hdu[0].header['DT']),
+                 'n_bins': int(fits_hdu[0].header['N_BINS']),
+                 'n_seg': int(fits_hdu[0].header['SEGMENTS']),
+                 'exposure': float(fits_hdu[0].header['EXPOSURE']),
+                 'detchans': int(fits_hdu[0].header['DETCHANS']),
+                 'n_seconds': float(fits_hdu[0].header['SEC_SEG']),
+                 'df': float(fits_hdu[0].header['DF'])}
+
+    rate_ci = np.asarray(fits_hdu[0].header['RATE_CI'].replace('[',\
+            '').replace(']','').split(','), dtype=np.float64)
     rate_ref = float(fits_hdu[0].header['RATE_REF'])
-    n_seconds = n_bins * dt
 
     cs_data = fits_hdu[1].data
     powci_data = fits_hdu[2].data
     powref_data = fits_hdu[3].data
 
     try:
-        cs_avg = np.reshape(cs_data.field('CROSS'), (n_bins / 2 + 1, detchans), \
-                            order='C')
+        cs_avg = np.reshape(cs_data.field('CROSS'),
+                (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans']), order='C')
         power_ci = np.reshape(powci_data.field('POWER'),
-                              (n_bins / 2 + 1, detchans), \
-                              order='C')
+                (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans']), order='C')
     except ValueError:
-        cs_avg = np.reshape(cs_data.field('CROSS'), (n_bins, detchans), \
-                            order='C')
-        power_ci = np.reshape(powci_data.field('POWER'), (n_bins, detchans), \
-                              order='C')
+        cs_avg = np.reshape(cs_data.field('CROSS'), (meta_dict['n_bins'],
+                meta_dict['detchans']), order='C')
+        power_ci = np.reshape(powci_data.field('POWER'), (meta_dict['n_bins'],
+                meta_dict['detchans']), order='C')
 
     power_ref = powref_data.field('POWER')
     freq = powref_data.field('FREQUENCY')
 
-    return freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans, \
-           n_seconds, n_seg, rate_ci, rate_ref, evt_list
+    return freq, cs_avg, power_ci, power_ref, meta_dict, rate_ci, rate_ref, \
+            evt_list
 
 
 ################################################################################
-def fits_out(out_file, in_file, evt_list, dt, n_bins, n_seg, detchans,
+def fits_out(out_file, in_file, evt_list, meta_dict,
              lo_freq, up_freq, lo_energy, up_energy, mean_rate_ci,
              mean_rate_ref, freq, phase, err_phase, tlag, err_tlag, e_phase,
              e_err_phase, e_tlag, e_err_tlag):
@@ -104,35 +144,28 @@ def fits_out(out_file, in_file, evt_list, dt, n_bins, n_seg, detchans,
     evt_list : str
         The full path of the event list of the data.
 
-    dt : float
-        Timestep of each bin in the light curve.
-
-    n_bins : int
-        The number of bins in one Fourier segment of the light curve.
-
-    n_seg : int
-        The number of Fourier segments averaged over to make the cross spectrum.
-
-    detchans : int
-        The number of detector energy channels in this data mode.
+    meta_dict : dict
+        Dictionary of meta-parameters needed for analysis.
 
     lo_freq, up_freq : float
         The lower and upper frequency bounds to average over for computing the
-        lag-energy spectrum. In Hz.
+        lag-energy spectrum, inclusive, in Hz.
 
     lo_energy, up_energy : int
         The lower and upper energy bounds to average over for computing the
-        lag-frequency spectrum. In detector energy channel.
+        lag-frequency spectrum, inclusive, in detector energy channel.
 
     mean_rate_ci : np.array of floats
-        The mean photon count rate of each of the cross-spectral channels of
-        interest.
+        1-D array of the mean photon count rate of each of the cross-spectral
+        channels of interest, in cts/s.
 
     mean_rate_ref : float
-        The mean photon count rate of the cross-spectral reference band.
+        The mean photon count rate of the cross-spectral reference band, in
+        cts/s.
 
     freq : np.array of floats
-        Fourier frequencies against which the lag-frequency spectrum is plotted.
+        1-D array of the Fourier frequencies against which the lag-frequency
+        spectrum is plotted.
 
     phase, err_phase : np.array of floats
         The phase and error in phase of the frequency lags, in radians.
@@ -148,7 +181,7 @@ def fits_out(out_file, in_file, evt_list, dt, n_bins, n_seg, detchans,
 
     """
 
-    chan = np.arange(0, detchans)
+    chan = np.arange(0, meta_dict['detchans'])
     f_bins = np.repeat(freq, len(chan))
 
     print "Output sent to: %s" % out_file
@@ -159,12 +192,11 @@ def fits_out(out_file, in_file, evt_list, dt, n_bins, n_seg, detchans,
     prihdr.set('DATE', str(datetime.now()), "YYYY-MM-DD localtime")
     prihdr.set('EVTLIST', evt_list)
     prihdr.set('CS_DATA', in_file)
-    prihdr.set('DT', dt, "seconds")
-    prihdr.set('N_BINS', n_bins, "time bins per segment")
-    prihdr.set('SEGMENTS', n_seg, "segments in the whole light curve")
-    prihdr.set('EXPOSURE', n_seg * n_bins * dt,
-               "seconds, of light curve")
-    prihdr.set('DETCHANS', detchans, "Number of detector energy channels")
+    prihdr.set('DT', meta_dict['dt'], "seconds")
+    prihdr.set('N_BINS', meta_dict['n_bins'], "time bins per segment")
+    prihdr.set('SEGMENTS', meta_dict['n_seg'], "segments in the whole light curve")
+    prihdr.set('EXPOSURE', meta_dict['exposure'], "seconds, of light curve")
+    prihdr.set('DETCHANS', meta_dict['detchans'], "Number of detector energy channels")
     prihdr.set('LAG_LF', lo_freq, "Hz")
     prihdr.set('LAG_UF', up_freq, "Hz")
     prihdr.set('LAG_LE', lo_energy, "Detector channel")
@@ -202,7 +234,7 @@ def fits_out(out_file, in_file, evt_list, dt, n_bins, n_seg, detchans,
     assert out_file[-4:].lower() == "fits", \
         'ERROR: Output file must have extension ".fits".'
     if os.path.isfile(out_file):
-        subprocess.call(["rm", out_file])
+        os.remove(out_file)
 
     ## Writing to a FITS file
     thdulist = fits.HDUList([prihdu, tbhdu1, tbhdu2])
@@ -210,7 +242,7 @@ def fits_out(out_file, in_file, evt_list, dt, n_bins, n_seg, detchans,
 
 
 ################################################################################
-def get_phase_err(cs_avg, power_ci, power_ref, n, M):
+def get_phase_err(cs_avg, power_ci, power_ref, n_range, n_seg):
     """
     Computes the error on the complex phase (in radians) via the coherence.
     Power should NOT be Poisson noise-subtracted.
@@ -227,22 +259,23 @@ def get_phase_err(cs_avg, power_ci, power_ref, n, M):
     power_ref : np.array of floats
         The raw power in the reference band, averaged over Fourier segments.
 
-    n : int
+    n_range : int
         The number of Fourier frequency bins being averaged together.
 
-    M : int
+    n_seg : int
         The number of segments averaged over
 
     Returns
     -------
-
+    phase_err : np.array of floats
+        1-D array of the error on the phase of the lag.
 
     """
     with np.errstate(all='ignore'):
         a = power_ci * power_ref
         coherence = np.where(a != 0, np.abs(cs_avg) ** 2 / a, 0)
-        phase_err = np.sqrt(np.where(coherence != 0, (1 - coherence) / \
-                                     (2 * coherence * n * M), 0))
+        phase_err = np.sqrt(np.where(coherence != 0, (1 - coherence) /
+                (2 * coherence * n_range * n_seg), 0))
 
     return phase_err
 
@@ -256,15 +289,15 @@ def phase_to_tlags(phase, f):
     Parameters
     ----------
     phase : float or np.array of floats
-        The phase of the lag, in radians.
+        1-D array of the phase of the lag, in radians.
 
     f : float or np.array of floats
-        The Fourier frequency of the cross-spectrum.
+        1-D array of the Fourier frequency of the cross-spectrum, in Hz.
 
     Returns
     -------
     tlags : float or np.array of floats
-        The time of the lag, in seconds.
+        1-D array of the time of the lag, in seconds.
 
     """
     assert np.shape(phase) == np.shape(f), "ERROR: Phase array must have same "\
@@ -280,9 +313,44 @@ def phase_to_tlags(phase, f):
 def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
                   err_tlag, lo_freq, up_freq, lo_energy, up_energy):
     """
-	Plots the lag-frequency spectrum.
-	
-	"""
+    Plots the lag-frequency spectrum.
+
+    Parameters
+    ----------
+    out_root : str
+        Dir+base name for plots generated, to be appended with '_lag-freq.(plot
+        _ext)'.
+
+    plot_ext : str
+        File extension for the plots. Do not include the dot.
+
+    prefix : str
+        Identifying prefix of the data (object nickname or data ID).
+
+    freq : np.array of floats
+        1-D array of the Fourier frequency of the cross-spectrum, in Hz.
+        Size = (f_range), range of frequencies to plot.
+
+    phase, err_phase : np.arrays of floats
+        1-D arrays of the phase and error on phase of the frequency lags, in
+        radians. Shape = (f_range), range of frequencies to plot.
+
+    tlag, err_tlag : np.arrays of floats
+        1-D arrays of the time lag and error on time lag for frequency lags, in
+        seconds. Size = (f_range), range of frequencies to plot.
+
+    lo_freq, up_freq : floats
+        Lower and upper bound of frequency range for averaging, inclusive, in
+        Hz.
+
+    lo_energy, up_energy : ints
+        Lower and upper bound of energy channel range for averaging, inclusive,
+        in detector energy channels. Written to plot title.
+
+    Returns
+    -------
+    nothing, but plots a file and saves it.
+    """
 
     font_prop = font_manager.FontProperties(size=20)
 
@@ -328,6 +396,40 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     """
     Plots the lag-energy spectrum.
 
+    Parameters
+    ----------
+    out_root : str
+        Dir+base name for plots generated, to be appended with '_lag-energy.
+        (plot_ext)'.
+
+    plot_ext : str
+        File extension for the plots. Do not include the dot.
+
+    prefix : str
+        Identifying prefix of the data (object nickname or data ID).
+
+    freq : np.array of floats
+        1-D array of the Fourier frequency of the cross-spectrum, in Hz.
+
+    phase, err_phase : np.arrays of floats
+        1-D arrays of the phase and error on phase of the energy lags, in
+        radians.
+
+    tlag, err_tlag : np.arrays of floats
+        1-D arrays of the time lag and error on time lag for energy lags, in
+        seconds.
+
+    lo_freq, up_freq : floats
+        Lower and upper bound of frequency range for averaging, inclusive, in
+        Hz. Written to plot title.
+
+    lo_energy, up_energy : ints
+        Lower and upper bound of energy channel range for averaging, inclusive,
+        in detector energy channels.
+
+    Returns
+    -------
+    nothing, but plots a file and saves it.
     """
     font_prop = font_manager.FontProperties(size=18)
     energy_list = [np.mean([x, y]) for x,y in tools.pairwise(energies_tab)]
@@ -409,29 +511,46 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
 
 
 ################################################################################
-def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
-        n_seconds, n_seg, mean_rate_ci, mean_rate_ref, lo_freq, up_freq,
-        lo_energy, up_energy):
+def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
+        mean_rate_ref, lo_freq, up_freq, lo_energy, up_energy):
     """
-    Computing frequency lags and energy lags.
+    Computing frequency lags (averaged over specified energies) and energy lags
+    (averaged over specified frequencies).
 
     Parameters
     ----------
     freq : np.array of floats
-    cs_avg : 2D np.array of complex numbers
-    power_ci : 2D np.array of floats
+        1-D array of the Fourier frequencies of the cross spectrum, in Hz.
+        Size = (n_bins), or (n_bins/2+1) for only positive Fourier frequencies.
+
+    cs_avg : np.array of complex numbers
+        2-D array of the cross spectrum, not normalized.
+        Size = (n_bins, detchans) or (n_bins/2+1, detchans).
+
+    power_ci : np.array of floats
+        2-D array of the power spectra in the channels of interest.
+        Size = (n_bins, detchans) or (n_bins/2+1, detchans).
+
     power_ref : np.array of floats
-    dt : float
-    n_bins : int
-    detchans : int
-    n_seconds : int
-    n_seg : int
+        1-D array of the power in the reference band. Size = (n_bins) or
+        (n_bins/2+1).
+
+    meta_dict : dict
+        Dictionary of meta-parameters needed for analysis.
+
     mean_rate_ci : np.array of floats
+        1-D array of the mean count rate per channel of interest, in cts/s.
+
     mean_rate_ref : float
-    lo_freq : float
-    up_freq : float
-    lo_energy : float
-    up_energy : float
+        Mean count rate of the reference band, in cts/s.
+
+    lo_freq, up_freq : floats
+        Lower and upper bound of frequency range for averaging the energy lags,
+        inclusive, in Hz.
+
+    lo_energy, up_energy : floats
+        Lower and upper bound of energy channel range for averaging the
+        frequency lags, inclusive, in detector energy channels.
 
     Returns
     -------
@@ -441,7 +560,7 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
 
     ## If cross spectrum contains positive and negative frequencies, only keep
     ## the positive ones
-    if np.shape(cs_avg) == (n_bins, detchans):
+    if np.shape(cs_avg) == (meta_dict['n_bins'], meta_dict['detchans']):
         nyq_ind = np.argmax(freq) + 1  ## because in python, the scipy fft makes
                 ## the nyquist frequency negative, and we want it to be
                 ## positive! (it is actually both pos and neg)
@@ -452,10 +571,10 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
         power_ci = power_ci[0:nyq_ind + 1, ]
         power_ref = power_ref[0:nyq_ind + 1]
 
-    assert np.shape(power_ci) == (n_bins / 2 + 1, detchans)
-    assert np.shape(power_ref) == (n_bins / 2 + 1,)
-    assert np.shape(cs_avg) == (n_bins / 2 + 1, detchans)
-    assert np.shape(freq) == (n_bins / 2 + 1,)
+    assert np.shape(power_ci) == (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans'])
+    assert np.shape(power_ref) == (meta_dict['n_bins'] / 2 + 1,)
+    assert np.shape(cs_avg) == (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans'])
+    assert np.shape(freq) == (meta_dict['n_bins'] / 2 + 1,)
 
     ###########################
     ## Averaging over energies
@@ -473,7 +592,7 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
     f_phase = -np.arctan2(erange_cs.imag, erange_cs.real)  ## Negative sign is
             ## so that a positive lag is a hard energy lag
     f_err_phase = get_phase_err(erange_cs, erange_pow_ci, erange_pow_ref, \
-            e_span, n_seg)
+            e_span, meta_dict['n_seg'])
     f_tlag = phase_to_tlags(f_phase, freq)
     f_err_tlag = phase_to_tlags(f_err_phase, freq)
 
@@ -496,7 +615,7 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
     frange_cs = np.mean(cs_avg[f_span_low:f_span_hi + 1, ], axis=0)
     frange_pow_ci = np.mean(power_ci[f_span_low:f_span_hi + 1, ], axis=0)
     frange_pow_ref = np.repeat(np.mean(power_ref[f_span_low:f_span_hi + 1]), \
-                               detchans)
+                               meta_dict['detchans'])
 
     #############################################
     ## Getting lag and error for lag-energy plot
@@ -505,8 +624,8 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
     e_phase = -np.arctan2(frange_cs.imag, frange_cs.real)  ## Negative sign is
             ## so that a positive lag is a hard energy lag ??
     e_err_phase = get_phase_err(frange_cs, frange_pow_ci, frange_pow_ref, \
-            f_span, n_seg)
-    f = np.repeat(np.mean(frange_freq), detchans)
+            f_span, meta_dict['n_seg'])
+    f = np.repeat(np.mean(frange_freq), meta_dict['detchans'])
     e_tlag = phase_to_tlags(e_phase, f)
     e_err_tlag = phase_to_tlags(e_err_phase, f)
 
@@ -516,35 +635,43 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans,
 
 
 ################################################################################
-def main(in_file, out_file, energies_file, plot_root, prefix, plot_ext="eps",
-        lo_freq=1.0, up_freq=10.0, lo_energy=2, up_energy=26):
+def main(in_file, out_file, energies_file, plot_root, prefix="--",
+        plot_ext="eps", lo_freq=1.0, up_freq=10.0, lo_energy=2, up_energy=26):
     """
-    Computes the phase lag and time lag from the average cross spectrum. Note
-    that power_ci, power_ref, and cs_avg should be unnormalized and without
+    Compute the phase lag and time lag from the average cross spectrum.
+
+    Note that power_ci, power_ref, and cs_avg should be unnormalized and without
     noise subtracted.
+
+    Parameters
+    ----------
+
 
     """
 
     energies_tab = np.loadtxt(energies_file)
 
-    ## Get necessary information and data from the input file
-    freq, cs_avg, power_ci, power_ref, dt, n_bins, detchans, n_seconds, \
-            n_seg, mean_rate_ci, mean_rate_ref, evt_list = get_inputs(in_file)
+    #######################################################
+    ## Get analysis constants and data from the input file
+    #######################################################
+
+    freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci, mean_rate_ref, \
+            evt_list = get_inputs(in_file)
 
     ######################
     ## Computing the lags
     ######################
 
     f_phase, f_err_phase, f_tlag, f_err_tlag, e_phase,e_err_phase, e_tlag, \
-            e_err_tlag = compute_lags(freq, cs_avg, power_ci, power_ref, dt,
-            n_bins, detchans, n_seconds, n_seg, mean_rate_ci,
-            mean_rate_ref, lo_freq, up_freq, lo_energy, up_energy)
+            e_err_tlag = compute_lags(freq, cs_avg, power_ci, power_ref,
+            meta_dict, mean_rate_ci, mean_rate_ref, lo_freq, up_freq, lo_energy,
+            up_energy)
 
     ##########
     ## Output
     ##########
 
-    fits_out(out_file, in_file, evt_list, dt, n_bins, n_seg, detchans,
+    fits_out(out_file, in_file, evt_list, meta_dict,
             lo_freq, up_freq, lo_energy, up_energy, mean_rate_ci,
             mean_rate_ref, freq, f_phase, f_err_phase, f_tlag, f_err_tlag,
             e_phase, e_err_phase, e_tlag, e_err_tlag)
@@ -557,15 +684,16 @@ def main(in_file, out_file, energies_file, plot_root, prefix, plot_ext="eps",
             f_tlag, f_err_tlag, lo_freq, up_freq, lo_energy, up_energy)
 
     plot_lag_energy(plot_root, energies_tab, plot_ext, prefix, e_phase,
-            e_err_phase, e_tlag, e_err_tlag, lo_freq, up_freq, detchans)
+            e_err_phase, e_tlag, e_err_tlag, lo_freq, up_freq,
+            meta_dict['detchans'])
 
 
 ################################################################################
 if __name__ == "__main__":
 
-    ##############################################
-    ## Parsing input arguments and calling 'main'
-    ##############################################
+    #########################################
+    ## Parse input arguments and call 'main'
+    #########################################
 
     parser = argparse.ArgumentParser(usage="python get_lags.py infile outfile "\
             "[OPTIONAL ARGUMENTS]", description=__doc__,
@@ -580,8 +708,9 @@ if __name__ == "__main__":
             "lag spectra to.")
 
     parser.add_argument('energies_tab', help="Name of the txt file containing "\
-            "a list of the keV energies that map to the detector energy "\
-            "channels.")
+            "a list of the keV energy boundaries of the detector energy "\
+            "channels (so for 4 channels, would have 5 energies listed). "\
+            "Created in rxte_reduce/channel_to_energy.py.")
 
     parser.add_argument('-o', dest='plot_root', default="./plot", help="Root "\
             "name for plots generated, to be appended with '_lag-freq.(ext"\
