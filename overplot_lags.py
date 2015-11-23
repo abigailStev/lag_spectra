@@ -36,7 +36,7 @@ UP_ENERGY = 20.0
 DETCHANS = 64
 
 
-def make_plot(in_file_list, labels, plot_root):
+def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
     """
     Plots multiple lag plots in one figure.
 
@@ -59,14 +59,14 @@ def make_plot(in_file_list, labels, plot_root):
 
     """
 
-    colours=["black",
-             "blue",
-             "green",
-             "magenta",
-             "orange"]
+    colours = ["black",
+               "blue",
+               "green",
+               "magenta",
+               "orange"]
 
     markers = ['o',
-               'd'
+               'd',
                '*',
                '.',
                'x']
@@ -170,7 +170,7 @@ def make_plot(in_file_list, labels, plot_root):
     plt.savefig(plot_file)
     # 	plt.show()
     plt.close()
-    subprocess.call(['open', plot_file])
+    # subprocess.call(['open', plot_file])
 
 
 if __name__ == "__main__":
