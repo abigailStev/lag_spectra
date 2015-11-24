@@ -17,9 +17,6 @@ frequency and over energy channel.
 See Uttley et al 2014 section 2 for the relevant equations and physical 
 explanations.
 
-Currently (09 Apr 2015) seems to be off by a factor of 2?
-Saw this line in Nov 2015 -- don't think it is anymore.
-
 ### overplot_lag-energy.py
 Plots multiple lag-energy spectra (from different observations, simulations, 
 etc.) on the same plot.
