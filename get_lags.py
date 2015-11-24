@@ -8,6 +8,19 @@ Reads from a FITS file where constants are in extension 0 header, cross spectrum
 is in extension 1, power spectrum of interest bands are in extension 2, and
 power spectrum of reference band is in extension 3.
 
+Files created
+-------------
+*_lags.fits :
+    Output file with header in FITS extension 0, lag-frequency in extension 1,
+    lag-energy in extension 2.
+
+*_lag-freq.(plot_ext) :
+    Plot of the lags vs frequency.
+
+*_lag-energy.(plot_ext) :
+    Plot of the lag-energy spectrum.
+
+
 Example call:
 python get_lags.py ./cygx1_cs.fits ./cygx1_lags.fits ./cygx1_energies.txt
 
@@ -123,12 +136,11 @@ def get_inputs(in_file):
 
 
 ################################################################################
-def fits_out(out_file, in_file, evt_list, meta_dict,
-             lo_freq, up_freq, lo_energy, up_energy, mean_rate_ci,
-             mean_rate_ref, freq, phase, err_phase, tlag, err_tlag, e_phase,
-             e_err_phase, e_tlag, e_err_tlag):
+def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
+        lo_energy, up_energy, mean_rate_ci, mean_rate_ref, freq, phase,
+        err_phase, tlag, err_tlag, e_phase, e_err_phase, e_tlag, e_err_tlag):
     """
-    Writes the lag-frequency and lag-energy spectra to a FITS output file.
+    Write the lag-frequency and lag-energy spectra to a FITS output file.
     Header info is in extension 0, lag-frequency is in extension 1, and
     lag-energy is in extension 2. Arrays are flattened C-style before being
     saved as FITS tables.
@@ -136,7 +148,7 @@ def fits_out(out_file, in_file, evt_list, meta_dict,
     Parameters
     ----------
     out_file : str
-        The full path of the output file.
+        The full path of the output file, in format '*_lag.fits'.
 
     in_file : str
         The full path of the cross-spectrum input file.
@@ -179,6 +191,10 @@ def fits_out(out_file, in_file, evt_list, meta_dict,
     e_tlag, e_err_tlag : np.array of floats
         The time and error in time of the energy lags, in seconds.
 
+    Returns
+    -------
+    Nothing, but writes to file '*_lag.fits'.
+
     """
 
     chan = np.arange(0, meta_dict['detchans'])
@@ -186,7 +202,7 @@ def fits_out(out_file, in_file, evt_list, meta_dict,
 
     print "Output sent to: %s" % out_file
 
-    ## Making FITS header (extension 0)
+    ## Make FITS header (extension 0)
     prihdr = fits.Header()
     prihdr.set('TYPE', "Lag-frequency and lag-energy spectral data")
     prihdr.set('DATE', str(datetime.now()), "YYYY-MM-DD localtime")
@@ -205,7 +221,7 @@ def fits_out(out_file, in_file, evt_list, meta_dict,
     prihdr.set('RATE_REF', mean_rate_ref, "counts/second")
     prihdu = fits.PrimaryHDU(header=prihdr)
 
-    ## Making FITS table for lag-frequency plot (extension 1)
+    ## Make FITS table for lag-frequency plot (extension 1)
     col1 = fits.Column(name='FREQUENCY', format='D', array=f_bins)
     col2 = fits.Column(name='PHASE', unit='radians', format='D',
                        array=phase.flatten('C'))
@@ -218,7 +234,7 @@ def fits_out(out_file, in_file, evt_list, meta_dict,
     cols = fits.ColDefs([col1, col2, col3, col4, col5])
     tbhdu1 = fits.BinTableHDU.from_columns(cols)
 
-    ## Making FITS table for lag-energy plot (extension 2)
+    ## Make FITS table for lag-energy plot (extension 2)
     col1 = fits.Column(name='PHASE', unit='radians', format='D', array=e_phase)
     col2 = fits.Column(name='PHASE_ERR', unit='radians', format='D', \
                        array=e_err_phase)
@@ -230,22 +246,20 @@ def fits_out(out_file, in_file, evt_list, meta_dict,
     cols = fits.ColDefs([col1, col2, col3, col4, col5])
     tbhdu2 = fits.BinTableHDU.from_columns(cols)
 
-    ## If the file already exists, remove it
+    ## Check that the filename has FITS file extension
     assert out_file[-4:].lower() == "fits", \
         'ERROR: Output file must have extension ".fits".'
-    if os.path.isfile(out_file):
-        os.remove(out_file)
 
-    ## Writing to a FITS file
+    ## Write to a FITS file
     thdulist = fits.HDUList([prihdu, tbhdu1, tbhdu2])
-    thdulist.writeto(out_file)
+    thdulist.writeto(out_file, clobber=True)
 
 
 ################################################################################
 def get_phase_err(cs_avg, power_ci, power_ref, n_range, n_seg):
     """
-    Computes the error on the complex phase (in radians) via the coherence.
-    Power should NOT be Poisson noise-subtracted.
+    Compute the error on the complex phase (in radians) via the coherence.
+    Power should NOT be Poisson-noise-subtracted or normalized.
 
     Parameters
     ----------
@@ -283,7 +297,7 @@ def get_phase_err(cs_avg, power_ci, power_ref, n_range, n_seg):
 ################################################################################
 def phase_to_tlags(phase, f):
     """
-    Converts a complex-plane cross-spectrum phase (in radians) to a time lag
+    Convert a complex-plane cross-spectrum phase (in radians) to a time lag
     (in seconds).
 
     Parameters
@@ -349,7 +363,7 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
 
     Returns
     -------
-    nothing, but plots a file and saves it.
+    Nothing, but saves a plot to '*_lag-freq.[plot_ext]'.
     """
 
     font_prop = font_manager.FontProperties(size=20)
@@ -429,7 +443,8 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
 
     Returns
     -------
-    nothing, but plots a file and saves it.
+    Nothing, but saves a plot to '*_lag-energy.[plot_ext]'.
+
     """
     font_prop = font_manager.FontProperties(size=18)
     energy_list = [np.mean([x, y]) for x,y in tools.pairwise(energies_tab)]
@@ -645,7 +660,56 @@ def main(in_file, out_file, energies_file, plot_root, prefix="--",
 
     Parameters
     ----------
+    in_file : str
+        The full path of the cross-spectrum input file.
 
+    out_file : str
+        The full path of the output file, in format '*_lag.fits'.
+
+    energies_file : str
+        Name of the txt file containing a list of the keV energy boundaries of
+        the detector energy channels (so for 4 channels, would have 5 energies
+        listed). Created in rxte_reduce/channel_to_energy.py.
+
+    plot_root : str
+        Dir+base name for plots generated, to be appended with '_lag-freq.(plot
+        _ext)' and '_lag-energy.(plot_ext)'.
+
+    prefix : str
+        Identifying prefix of the data (object nickname or data ID). [--]
+
+    plot_ext : str
+        File extension for the plots. Do not include the dot. [eps]
+
+    lo_freq : float
+        The lower bound of the frequency range to average the energy lags over
+        and plot the frequency lags in, inclusive, in Hz.
+
+    up_freq : float
+        The upper bound of the frequency range to average the energy lags over
+        and plot the frequency lags in, inclusive, in Hz.
+
+    lo_energy : int
+        The lower bound of the energy channel range to average the frequency
+        lags over and plot the energy lags in, inclusive, in detector energy
+        channels.
+
+    up_energy : int
+        The upper bound of the energy channel range to average the frequency
+        lags over and plot the energy lags in, inclusive, in detector energy
+        channels.
+
+    Files created
+    -------------
+    *_lags.fits :
+        Output file with header in FITS extension 0, lag-frequency in extension
+        1, lag-energy in extension 2.
+
+    *_lag-freq.(plot_ext) :
+        Plot of the lags vs frequency.
+
+    *_lag-energy.(plot_ext) :
+        Plot of the lag-energy spectrum.
 
     """
 
@@ -659,7 +723,7 @@ def main(in_file, out_file, energies_file, plot_root, prefix="--",
             evt_list = get_inputs(in_file)
 
     ######################
-    ## Computing the lags
+    ## Compute the lags
     ######################
 
     f_phase, f_err_phase, f_tlag, f_err_tlag, e_phase,e_err_phase, e_tlag, \
@@ -723,24 +787,25 @@ if __name__ == "__main__":
     parser.add_argument('--ext', dest='plot_ext', default='eps',
             help="File extension for the plots. Do not include the dot. [eps]")
 
-    parser.add_argument('--lf', dest='lo_freq', default=1.0,
-            type=tools.type_positive_float, help="The lower limit of the "\
-            "frequency range for the lag-energy spectrum to be computed for, "\
-            "in Hz. [1.0]")
+    parser.add_argument('--lf', dest='lo_freq', type=tools.type_positive_float,
+            default=1.0, help="The lower bound of the frequency range to "\
+            "average the energy lags over and plot the frequency lags in, "\
+            "inclusive, in Hz. [1.0]")
 
-    parser.add_argument('--uf', dest='up_freq', default=10.0,
-            type=tools.type_positive_float, help="The upper limit of the "\
-            "frequency range for the lag-energy spectrum to be computed for, "\
-            "in Hz. [10.0]")
+    parser.add_argument('--uf', dest='up_freq', type=tools.type_positive_float,
+            default=10.0, help="The upper bound of the frequency range to "\
+            "average the energy lags over and plot the frequency lags in, "\
+            "inclusive, in Hz. [10.0]")
 
-    parser.add_argument('--le', dest='lo_energy', default=2,
-            type=tools.type_positive_int, help="The lower limit of the energy "\
-            "range for the lag-frequency spectrum to be computed for, in "\
-            "detector channels. [2]")
+    parser.add_argument('--le', dest='lo_energy', type=tools.type_positive_int,
+            default=2, help="The lower bound of the energy channel range to "\
+            "average the frequency lags over and plot the energy lags in, "\
+            "inclusive, in detector energy channels. [2]")
 
     parser.add_argument('--ue', dest='up_energy', type=tools.type_positive_int,
-            default=26, help="The upper limit of the energy range for the lag-"\
-            "frequency spectrum to be computed for, in detector channels. [26]")
+            default=26, help="The upper bound of the energy channel range to "\
+            "average the frequency lags over and plot the energy lags in, "\
+            "inclusive, in detector energy channels. [26]")
 
     args = parser.parse_args()
 
