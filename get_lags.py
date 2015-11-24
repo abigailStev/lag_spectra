@@ -43,6 +43,7 @@ import tools  ## in https://github.com/abigailStev/whizzy_scripts
 __author__ = "Abigail Stevens <A.L.Stevens at uva.nl>"
 __year__ = "2015"
 
+
 ################################################################################
 def get_inputs(in_file):
     """
@@ -256,74 +257,6 @@ def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
 
 
 ################################################################################
-def get_phase_err(cs_avg, power_ci, power_ref, n_range, n_seg):
-    """
-    Compute the error on the complex phase (in radians) via the coherence.
-    Power should NOT be Poisson-noise-subtracted or normalized.
-
-    Parameters
-    ----------
-    cs_avg : 2D np.array of complex numbers
-        The cross spectrum, averaged over Fourier segments.
-
-    power_ci : 2D np.array of floats
-        The raw power in the channels of interest, averaged over Fourier
-        segments.
-
-    power_ref : np.array of floats
-        The raw power in the reference band, averaged over Fourier segments.
-
-    n_range : int
-        The number of Fourier frequency bins being averaged together.
-
-    n_seg : int
-        The number of segments averaged over
-
-    Returns
-    -------
-    phase_err : np.array of floats
-        1-D array of the error on the phase of the lag.
-
-    """
-    with np.errstate(all='ignore'):
-        a = power_ci * power_ref
-        coherence = np.where(a != 0, np.abs(cs_avg) ** 2 / a, 0)
-        phase_err = np.sqrt(np.where(coherence != 0, (1 - coherence) /
-                (2 * coherence * n_range * n_seg), 0))
-
-    return phase_err
-
-
-################################################################################
-def phase_to_tlags(phase, f):
-    """
-    Convert a complex-plane cross-spectrum phase (in radians) to a time lag
-    (in seconds).
-
-    Parameters
-    ----------
-    phase : float or np.array of floats
-        1-D array of the phase of the lag, in radians.
-
-    f : float or np.array of floats
-        1-D array of the Fourier frequency of the cross-spectrum, in Hz.
-
-    Returns
-    -------
-    tlags : float or np.array of floats
-        1-D array of the time of the lag, in seconds.
-
-    """
-    assert np.shape(phase) == np.shape(f), "ERROR: Phase array must have same "\
-            "dimensions as frequency array."
-
-    with np.errstate(all='ignore'):
-        tlags = np.where(f != 0, phase / (2.0 * np.pi * f), 0)
-
-    return tlags
-
-
-################################################################################
 def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
                   err_tlag, lo_freq, up_freq, lo_energy, up_energy):
     """
@@ -400,8 +333,7 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
     plt.savefig(plot_file)
     # plt.show()
     plt.close()
-
-# subprocess.call(['open', plot_file])
+    # subprocess.call(['open', plot_file])
 
 
 ################################################################################
@@ -524,6 +456,230 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     plt.close()
     # subprocess.call(['open', plot_file])
 
+################################################################################
+def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
+        n_range):
+    """
+    Compute the bias term to be subtracted off the cross spectrum to compute
+    the covariance spectrum. Equation in Equation in footnote 4 (section 2.1.3,
+    page 12) of Uttley et al. 2014.
+
+    Assumes power spectra are raw (not at all normalized, and not Poisson-noise-
+    subtracted).
+
+    Parameters
+    ----------
+    power_ci : np.array of floats
+        2-D array of the power in the channels of interest, raw (not normalized
+        and not Poisson-noise-subtracted), of the frequencies to be averaged
+        over. Size = detchans (if avg over freq) or n_bins/2+1 (if avg over energy).
+
+    power_ref : np.array of floats
+        1-D array of the power in the reference band, raw (not normalized and
+        not Poisson-noise-subtracted), of the frequencies to be averaged over.
+        Size = 1 (if avg over freq) or n_bins/2+1 (if avg over energy).
+
+    mean_rate_ci : np.array of floats
+        1-D array of the mean count rate in the channels of interest, in cts/s.
+        Size = 1 (if avg over energy) or detchans (if avg over freq).
+
+    mean_rate_ref : float
+        Mean count rate in the reference band, in cts/s.
+
+    meta_dict : dict
+        Dictionary of meta-parameters needed for analysis.
+
+    n_range : int
+        Number of bins that will be averaged together for the lags. Energy bins
+        for frequency lags, frequency bins for energy lags.
+
+    Returns
+    -------
+    n_squared : float
+        The bias term to be subtracted off the cross spectrum for computing the
+        covariance spectrum. Equation in footnote 4 (section 2.1.3, page 12) of
+        Uttley et al. 2014.
+
+    """
+    ## Compute the Poisson noise level in absolute rms units
+    Pnoise_ref = mean_rate_ref * 2.0
+    Pnoise_ci = mean_rate_ci * 2.0
+
+    ## Normalizing power spectra to absolute rms normalization
+    ## Not subtracting the noise (yet)!
+    abs_ci = power_ci * (2.0 * meta_dict['dt'] / float(n_range))
+    abs_ref = power_ref * (2.0 * meta_dict['dt'] / float(n_range))
+
+    temp_a = (abs_ref - Pnoise_ref) * Pnoise_ci
+    temp_b = (abs_ci - Pnoise_ci) * Pnoise_ref
+    temp_c = Pnoise_ref * Pnoise_ci
+
+    n_squared = (temp_a + temp_b + temp_c) / (n_range * meta_dict['n_seg'])
+    return n_squared
+
+
+def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
+        mean_rate_ref, meta_dict, n_range):
+    """
+    Compute the raw coherence of the cross spectrum. Coherence equation from
+    Uttley et al 2014 eqn 11, bias term equation from footnote 4 on same page.
+
+    Parameters
+    ----------
+    cross_spec : np.array of complex numbers
+        1-D array of the cross spectrum, averaged over the desired energy
+        range or frequency range. Size = detchans (if avg over freq) or
+        n_bins/2+1 (if avg over energy). Should be raw, not normalized or
+        noise-subtracted. Eqn 9 of Uttley et al 2014.
+
+    power_ci : np.array of floats
+        1-D array of the channel of interest power spectrum, averaged over the
+        desired energy range or frequency range. Size = detchans (if avg over
+        freq) or n_bins/2+1 (if avg over energy). Should be raw, not normalized
+        or Poisson-noise-subtracted.
+
+    power_ref : np.array of floats
+        1-D array of the reference band power spectrum, possibly averaged over
+        the desired frequency range. Size = n_bins/2+1 (if avg over energy) or
+        detchans (if avg over freq; same thing repeated, to be same size as
+        power_ci). Should be raw, not normalized or Poisson-noise-subtracted.
+
+    mean_rate_ci : np.array of floats
+        1-D array of the mean count rates of the channels of interest, in cts/s.
+        Size = detchans (if avg over freq), or 1 (if avg over energy).
+
+    mean_rate_ref : float
+        Mean count rate of the reference band, in cts/s.
+
+    meta_dict : dict
+        Dictionary of meta-paramters needed for analysis.
+
+    n_range : int
+        Number of bins averaged over for lags. Energy bins for frequency lags,
+        frequency bins for energy lags. Same as K in equations in Section 2 of
+        Uttley et al. 2014.
+
+    Returns
+    -------
+    coherence : np.array of floats
+        The raw coherence of the cross spectrum. (Uttley et al 2014, eqn 11)
+        Size = n_bins/2+1 (if avg over energy) or detchans (if avg over freq).
+
+    """
+
+    ## Reshaping (broadcasting) the ref to have same size as ci
+    # if np.shape(power_ref) != np.shape(power_ci):
+    #     power_ref = np.resize(np.repeat(power_ref, np.shape(power_ci)[1]),
+    #             np.shape(power_ci))
+
+    cs_bias = bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref,
+            meta_dict, n_range)
+
+    temp_1 = power_ci * power_ref
+    temp_2 = cross_spec * np.conj(cross_spec) - cs_bias
+    with np.errstate(all='ignore'):
+        coherence = np.where(temp_1 != 0, temp_2 / temp_1, 0)
+    print "Coherence shape:", np.shape(coherence)
+    # print coherence
+    return np.real(coherence)
+
+
+################################################################################
+def get_phase_err(cs_avg, power_ci, power_ref, mean_rate_ci, mean_rate_ref,
+        meta_dict, n_range):
+    """
+    Compute the error on the complex phase (in radians) via the coherence.
+    Power should NOT be Poisson-noise-subtracted or normalized.
+
+    Parameters
+    ----------
+    cs_avg : np.array of complex numbers
+        1-D array of the raw cross spectrum, averaged over Fourier segments and
+        energy channels or frequency bins.
+        Size = detchans (if avg over freq) or n_bins/2+1 (if avg over energy).
+        Eqn 9 of Uttley et al 2014.
+
+    power_ci : np.array of floats
+        1-D array of the raw power in the channels of interest, averaged over
+        Fourier segments and energy channels or frequency bins.
+        Size = detchans (if avg over freq) or n_bins/2+1 (if avg over energy).
+
+    power_ref : np.array of floats
+        1-D array of the raw power in the reference band, averaged over Fourier
+        segments and possibly frequency bins. Size = detchans (if avg over freq;
+        same thing repeated, to be same size as power_ci) or n_bins/2+1 (if avg
+        over energy).
+
+    mean_rate_ci : np.array of floats
+        1-D array of the mean count rates of the channels of interest, in cts/s.
+        Size = detchans (if avg over freq), or 1 (if avg over energy).
+
+    mean_rate_ref : float
+        Mean count rate of the reference band, in cts/s.
+
+    meta_dict :
+        Dictionary of meta-paramters needed for analysis.
+
+    n_range : int
+        Number of bins averaged over for lags. Energy bins for frequency lags,
+        frequency bins for energy lags. Same as K in equations in Section 2 of
+        Uttley et al. 2014.
+
+    Returns
+    -------
+    phase_err : np.array of floats
+        1-D array of the error on the phase of the lag.
+
+    """
+
+    print "Pow ci:", np.shape(power_ci)
+    print "Pow ref:", np.shape(power_ref)
+    print "Pow cs:", np.shape(cs_avg)
+
+    # coherence = np.where(a != 0, cs_avg * np.conj(cs_avg) / a, 0)
+    coherence = compute_coherence(cs_avg, power_ci, power_ref, mean_rate_ci,
+            mean_rate_ref, meta_dict, n_range)
+
+    with np.errstate(all='ignore'):
+        phase_err = np.sqrt(np.where(coherence != 0, (1 - coherence) /
+                (2 * coherence * n_range * meta_dict['n_seg']), 0))
+
+    return phase_err
+
+
+################################################################################
+def phase_to_tlags(phase, f):
+    """
+    Convert a complex-plane cross-spectrum phase (in radians) to a time lag
+    (in seconds).
+
+    Parameters
+    ----------
+    phase : float or np.array of floats
+        1-D array of the phase of the lag, in radians.
+
+    f : float or np.array of floats
+        1-D array of the Fourier frequency of the cross-spectrum, in Hz.
+
+    Returns
+    -------
+    tlags : float or np.array of floats
+        1-D array of the time of the lag, in seconds.
+
+    """
+
+    if np.shape(phase) != np.shape(f):
+        ## Reshaping (broadcasting) f to have same size as phase
+        f = np.resize(np.repeat(f, np.shape(phase)[1]), np.shape(phase))
+
+    assert np.shape(phase) == np.shape(f), "ERROR: Phase array must have same "\
+            "dimensions as frequency array."
+
+    with np.errstate(all='ignore'):
+        tlags = np.where(f != 0, phase / (2.0 * np.pi * f), 0)
+
+    return tlags
+
 
 ################################################################################
 def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
@@ -540,15 +696,20 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
 
     cs_avg : np.array of complex numbers
         2-D array of the cross spectrum, not normalized.
+        Eqn 9 of Uttley et al 2014, with out summing over or dividing by K
+        (i.e., just averaged over the segments of data).
         Size = (n_bins, detchans) or (n_bins/2+1, detchans).
 
     power_ci : np.array of floats
-        2-D array of the power spectra in the channels of interest.
+        2-D array of the power spectra per channel of interest.
         Size = (n_bins, detchans) or (n_bins/2+1, detchans).
+        Eqn 2 of Uttley et al 2014, averaged over Fourier segments of data, per
+        channel of interest.
 
     power_ref : np.array of floats
         1-D array of the power in the reference band. Size = (n_bins) or
-        (n_bins/2+1).
+        (n_bins/2+1). Eqn 2 of Uttley et al 2014, averaged over Fourier segments
+        of data.
 
     meta_dict : dict
         Dictionary of meta-parameters needed for analysis.
@@ -586,9 +747,11 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
         power_ci = power_ci[0:nyq_ind + 1, ]
         power_ref = power_ref[0:nyq_ind + 1]
 
-    assert np.shape(power_ci) == (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans'])
+    assert np.shape(power_ci) == (meta_dict['n_bins'] / 2 + 1,
+            meta_dict['detchans'])
     assert np.shape(power_ref) == (meta_dict['n_bins'] / 2 + 1,)
-    assert np.shape(cs_avg) == (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans'])
+    assert np.shape(cs_avg) == (meta_dict['n_bins'] / 2 + 1,
+            meta_dict['detchans'])
     assert np.shape(freq) == (meta_dict['n_bins'] / 2 + 1,)
 
     ###########################
@@ -600,14 +763,18 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
     erange_pow_ci = np.mean(power_ci[:, lo_energy:up_energy + 1], axis=1)
     erange_pow_ref = power_ref
 
-    ################################################
-    ## Getting lag and error for lag-frequency plot
-    ################################################
+    print "E range cs:", np.shape(erange_cs)
 
-    f_phase = -np.arctan2(erange_cs.imag, erange_cs.real)  ## Negative sign is
-            ## so that a positive lag is a hard energy lag
-    f_err_phase = get_phase_err(erange_cs, erange_pow_ci, erange_pow_ref, \
-            e_span, meta_dict['n_seg'])
+    ############################################
+    ## Getting lag and error for frequency lags
+    ############################################
+
+    ## Negative sign is so that a positive lag is a hard energy lag
+    f_phase = -np.arctan2(erange_cs.imag, erange_cs.real)
+    print np.shape(f_phase)
+    f_err_phase = get_phase_err(erange_cs, erange_pow_ci, erange_pow_ref,
+            np.mean(mean_rate_ci[lo_energy:up_energy + 1]), mean_rate_ref,
+            meta_dict, e_span)
     f_tlag = phase_to_tlags(f_phase, freq)
     f_err_tlag = phase_to_tlags(f_err_phase, freq)
 
@@ -632,14 +799,13 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
     frange_pow_ref = np.repeat(np.mean(power_ref[f_span_low:f_span_hi + 1]), \
                                meta_dict['detchans'])
 
-    #############################################
-    ## Getting lag and error for lag-energy plot
-    #############################################
+    #########################################
+    ## Getting lag and error for energy lags
+    #########################################
 
-    e_phase = -np.arctan2(frange_cs.imag, frange_cs.real)  ## Negative sign is
-            ## so that a positive lag is a hard energy lag ??
-    e_err_phase = get_phase_err(frange_cs, frange_pow_ci, frange_pow_ref, \
-            f_span, meta_dict['n_seg'])
+    e_phase = -np.arctan2(frange_cs.imag, frange_cs.real)
+    e_err_phase = get_phase_err(frange_cs, frange_pow_ci, frange_pow_ref,
+            mean_rate_ci, mean_rate_ref, meta_dict, f_span)
     f = np.repeat(np.mean(frange_freq), meta_dict['detchans'])
     e_tlag = phase_to_tlags(e_phase, f)
     e_err_tlag = phase_to_tlags(e_err_phase, f)
