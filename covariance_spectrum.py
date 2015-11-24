@@ -1,9 +1,36 @@
 #!/usr/bin/env python
 """
 Computes the covariance spectrum for a data set. Equations come from the
-Uttley et al. 2014 review paper, section 2.2.3. Assumes the averaged power
+Uttley et al. 2014 review paper, section 2. Assumes the averaged power
 spectrum of the reference band, power spectra of the channels of interest, and
-cross spectrum have already been computed.
+cross spectrum have already been computed, and are not normalized or Poisson-
+noise-subtracted.
+
+Files created
+-------------
+*_cov.fits :
+    The covariance spectrum, in FITS format (more robust for storing floating
+    point numbers).
+
+*_cov.dat :
+    The covariance spectrum, in ASCII format (for use in ASCII2PHA).
+
+*_cov.pha :
+    The covariance spectrum, in .pha spectrum format, for use in XSPEC.
+
+temp_cov.dat, temp_cov.pha :
+    Temporary local files created because ASCII2PHA doesn't like how long the
+    filenames are.
+
+*_cov_xspec.xcm :
+    XSPEC script that plots the covariance spectrum unfolded through the
+    detector response matrix and a power law of slope 1.
+
+dump.txt
+    Temporary local file that the XSPEC output is piped (dumped) into.
+
+*_cov.eps :
+    Plot of said covariance spectrum created by the XSPEC script.
 
 """
 __author__ = 'Abigail Stevens <A.L.Stevens at uva.nl>'
@@ -32,7 +59,7 @@ def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
     Parameters
     ----------
     out_file : str
-        The full path of the output file.
+        The full path of the output file, in format '*_cov.fits'.
 
     in_file : str
         The full path of the cross-spectrum input file.
@@ -53,6 +80,10 @@ def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
 
     mean_rate_ref : float
         The mean photon count rate of the cross-spectral reference band.
+
+    Returns
+    -------
+    Nothing, but writes to the file '*_cov.fits'.
 
     """
 
@@ -80,7 +111,7 @@ def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
     prihdr.set('RATE_REF', mean_rate_ref, "counts/second")
     prihdu = fits.PrimaryHDU(header=prihdr)
 
-    ## Making FITS table for lag-frequency plot (extension 1)
+    ## Making FITS table of covariance spectrum (extension 1)
     col1 = fits.Column(name='CHANNEL', format='D', array=chan)
     col2 = fits.Column(name='COVARIANCE', unit='counts', format='D',
                        array=covariance_spectrum)
@@ -89,15 +120,13 @@ def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
     cols = fits.ColDefs([col1, col2, col3])
     tbhdu = fits.BinTableHDU.from_columns(cols)
 
-    ## If the file already exists, remove it
-    assert out_file[-4:].lower() == "fits", \
-        'ERROR: Output file must have extension ".fits".'
-    if os.path.isfile(out_file):
-        os.remove(out_file)
+    ## Check that filename  has FITS file extension.
+    assert out_file[-4:].lower() == "fits", "ERROR: Output file must have "\
+            "extension '.fits'."
 
     ## Writing to a FITS file
     thdulist = fits.HDUList([prihdu, tbhdu])
-    thdulist.writeto(out_file)
+    thdulist.writeto(out_file, clobber=True)
 
     ## Calling dat_out to save the covariance spectrum to a dat file, for
     ## the heasoft FTOOL ASCII2PHA
@@ -108,7 +137,7 @@ def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
 ################################################################################
 def dat_out(out_file, cov_spectrum, cov_error, detchans=64):
     """
-    Saves the covariance spectrum to a ".dat" file for later use in ascii2pha,
+    Save the covariance spectrum to a ".dat" file for later use in ascii2pha,
     for XSPEC.
 
     Parameters
@@ -127,7 +156,7 @@ def dat_out(out_file, cov_spectrum, cov_error, detchans=64):
 
     Returns
     -------
-    nothing, but writes to a file
+    Nothing, but writes to a file '*_cov.dat'.
 
     """
 
@@ -139,12 +168,54 @@ def dat_out(out_file, cov_spectrum, cov_error, detchans=64):
     ascii.write(out_table, out_file, format='no_header', fast_writer=True)
 
     assert os.path.isfile(out_file), "ERROR: Saving covariance spectrum to "\
-            "ASCII file did not work."
+            "ASCII file *_cov.dat did not work."
 
 
 ################################################################################
-def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp"):
+def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
+    """
+    Save the covariance spectrum as a local .dat file, converts that to a .pha
+    spectrum file using ASCII2PHA, writes an XSPEC script to plot the covariance
+    spectrum, and executes that script.
 
+    Parameters
+    ----------
+    meta_dict : dict
+        Dictionary of meta-parameters needed for analysis.
+
+    out_file : str
+        Name of the output file for the covariance spectrum.
+        In format '*_cov.fits'.
+
+    rsp_matrix : str
+        Local path name of the detector response matrix. [./PCU2.rsp]
+
+    prefix : str
+        Identifying prefix of the data (object nickname or data ID). [--]
+
+    Files created
+    -------------
+    *_cov.dat
+        The covariance spectrum, in ASCII format.
+
+    *_cov.pha
+        The covariance spectrum, in .pha spectrum format, for use in XSPEC.
+
+    temp_cov.dat, temp_cov.pha
+        Temporary local files created because ASCII2PHA doesn't like how long
+        the filenames are.
+
+    *_cov_xspec.xcm
+        XSPEC script that plots the covariance spectrum unfolded through the
+        detector response matrix and a power law of slope 1.
+
+    dump.txt
+        Temporary local file that the XSPEC output is piped (dumped) into.
+
+    *_cov.eps
+        Plot of said covariance spectrum created by the XSPEC script.
+
+    """
     cov_spec_dat = out_file.replace("_cov.fits", "_cov.dat")
     cov_spec_pha = out_file.replace("_cov.fits", "_cov.pha")
 
@@ -185,22 +256,23 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp"):
                  "filter=NONE",
                  "exposure=%.6f" % meta_dict['exposure'],
                  "clobber=yes",
-                 "respfile=%s" % rsp_matrix]
+                 "respfile=%s" % os.path.relpath(rsp_matrix)]
 
     ## Execute ascii2pha
     p = subprocess.Popen(ascii2pha, stdout=subprocess.PIPE,
             stdin=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
     p.communicate()  ## Waits for the command to finish running.
 
+    print os.getcwd()
+    print "./temp_cov.pha"
+
     assert os.path.isfile("./temp_cov.pha"), "ERROR: ASCII2PHA did not work. "\
             "temp_cov.pha does not exist."
 
     os.rename("./temp_cov.pha", cov_spec_pha)
-    # print "Cov spec pha:", cov_spec_pha
+    print "Cov spec pha:", cov_spec_pha
     assert os.path.isfile(cov_spec_pha), "ERROR: ASCII2PHA did not work. "\
             "cov_spec_pha does not exist: %s" % cov_spec_pha
-
-    cov_spec_pha = os.path.relpath(cov_spec_pha)
 
     ## Writing the xspec script file
     xspec_cmd_file = out_file.replace("_cov.fits", "_cov_xspec.xcm")
@@ -210,7 +282,7 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp"):
     cov_plot_file = out_file.replace("_cov.fits", "_cov.eps")
 
     with open(xspec_cmd_file, 'w') as out:
-        out.write("data %s\n" % cov_spec_pha)
+        out.write("data %s\n" % os.path.relpath(cov_spec_pha))
         out.write("ignore **-3.0 20.0-**\n")
         out.write("notice 3.0-20.0\n")
         out.write("ignore 11\n")
@@ -234,8 +306,8 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp"):
             "not work."
 
     ## Set up the shell command for xspec
-    xspec = 'xspec %s' % xspec_cmd_file  ## Use this one for debugging.
-    # xspec = 'xspec %s > dump.txt' % xspec_cmd_file  ## Use this one to not print to the screen.
+    # xspec = 'xspec %s' % xspec_cmd_file  ## Use this one for debugging.
+    xspec = 'xspec %s > dump.txt' % xspec_cmd_file  ## Use this one to not print to the screen.
 
     ## Execute xspec script
     p = subprocess.Popen(xspec, shell=True)
@@ -246,25 +318,67 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp"):
     assert os.path.isfile(cov_plot_file), "ERROR: Xspec didn't run correctly. "\
             "Covariance spectrum plot was not created."
 
+    subprocess.call(['open', cov_plot_file])
+
 
 ################################################################################
 def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
         n_freq):
     """
+    Compute the bias term to be subtracted off the cross spectrum to compute
+    the covariance spectrum. Equation in Equation in footnote 4 (section 2.1.3,
+    page 12) of Uttley et al. 2014.
+
     Assumes power spectra are raw (not at all normalized, and not Poisson-noise-
     subtracted).
 
-    :param power_ci:
-    :param power_ref:
-    :param n_bins:
-    :param n_seg:
-    :return:
-    """
-    Pnoise_ref = 0
-    Pnoise_ci = mean_rate_ci * 2.0  # absolute rms units
+    Parameters
+    ----------
+    power_ci : np.array of floats
+        2-D array of the power in the channels of interest, raw (not normalized
+        and not Poisson-noise-subtracted), of the frequencies to be averaged
+        over. Size = (n_freq, detchans)
 
+    power_ref : np.array of floats
+        1-D array of the power in the reference band, raw (not normalized and
+        not Poisson-noise-subtracted), of the frequencies to be averaged over.
+        Size = (n_freq).
+
+    mean_rate_ci : np.array of floats
+        1-D array of the mean count rate in the channels of interest, in cts/s.
+        Size = (detchans).
+
+    mean_rate_ref : float
+        Mean count rate in the reference band, in cts/s.
+
+    meta_dict : dict
+        Dictionary of meta-parameters needed for analysis.
+
+    n_freq : int
+        Number of frequency bins that will be averaged together for the
+        covariance spectrum.
+
+    Returns
+    -------
+    n_squared : float
+        The bias term to be subtracted off the cross spectrum for computing the
+        covariance spectrum. Equation in footnote 4 (section 2.1.3, page 12) of
+        Uttley et al. 2014.
+
+    """
+    ## Compute the Poisson noise level in absolute rms units
+    Pnoise_ref = mean_rate_ref * 2.0
+    Pnoise_ci = mean_rate_ci * 2.0
+
+    print np.shape(Pnoise_ref)
+    print np.shape(Pnoise_ci)
+
+    ## Normalizing power spectra to absolute rms normalization
+    ## Not subtracting the noise (yet)!
     abs_ci = power_ci * (2.0 * meta_dict['dt'] / float(n_freq))
     abs_ref = power_ref * (2.0 * meta_dict['dt'] / float(n_freq))
+
+    ## Reshaping (broadcasting) the ref to have same size as ci
     abs_ref = np.resize(np.repeat(abs_ref, meta_dict['detchans']),
         np.shape(abs_ci))
 
@@ -275,72 +389,173 @@ def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
     n_squared = (temp_a + temp_b + temp_c) / (n_freq * meta_dict['n_seg'])
     return n_squared
 
+def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
+        mean_rate_ref, meta_dict, n_range):
+    """
+    Compute the raw coherence of the cross spectrum. Coherence equation from
+    Uttley et al 2014 eqn 11, bias term equation from footnote 4 on same page.
+
+    Parameters
+    ----------
+    cross_spec : np.array of complex numbers
+        1-D array of the cross spectrum, averaged over the desired energy
+        range or frequency range. Size = detchans (if avg over freq) or
+        n_bins/2+1 (if avg over energy). Should be raw, not normalized or
+        noise-subtracted. Eqn 9 of Uttley et al 2014.
+
+    power_ci : np.array of floats
+        1-D array of the channel of interest power spectrum, averaged over the
+        desired energy range or frequency range. Size = detchans (if avg over
+        freq) or n_bins/2+1 (if avg over energy). Should be raw, not normalized
+        or Poisson-noise-subtracted.
+
+    power_ref : np.array of floats
+        1-D array of the reference band power spectrum, possibly averaged over
+        the desired frequency range. Size = n_bins/2+1 (if avg over energy) or
+        detchans (if avg over freq; same thing repeated, to be same size as
+        power_ci). Should be raw, not normalized or Poisson-noise-subtracted.
+
+    mean_rate_ci : np.array of floats
+        1-D array of the mean count rates of the channels of interest, in cts/s.
+        Size = detchans (if avg over freq), or 1 (if avg over energy).
+
+    mean_rate_ref : float
+        Mean count rate of the reference band, in cts/s.
+
+    meta_dict : dict
+        Dictionary of meta-paramters needed for analysis.
+
+    n_range : int
+        Number of bins averaged over for lags. Energy bins for frequency lags,
+        frequency bins for energy lags. Same as K in equations in Section 2 of
+        Uttley et al. 2014.
+
+    Returns
+    -------
+    coherence : np.array of floats
+        The raw coherence of the cross spectrum. (Uttley et al 2014, eqn 11)
+        Size = n_bins/2+1 (if avg over energy) or detchans (if avg over freq).
+
+    """
+
+    ## Reshaping (broadcasting) the ref to have same size as ci
+    # if np.shape(power_ref) != np.shape(power_ci):
+    #     power_ref = np.resize(np.repeat(power_ref, np.shape(power_ci)[1]),
+    #             np.shape(power_ci))
+
+    cs_bias = bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref,
+            meta_dict, n_range)
+
+    temp_1 = power_ci * power_ref
+    temp_2 = cross_spec * np.conj(cross_spec) - cs_bias
+    with np.errstate(all='ignore'):
+        coherence = np.where(temp_1 != 0, temp_2 / temp_1, 0)
+    print "Coherence shape:", np.shape(coherence)
+    # print coherence
+    return np.real(coherence)
+
 
 ################################################################################
-def main(in_file, out_file, energies_file, plot_root="./covariance",
-        prefix="--", plot_ext="eps", rsp_matrix="./PCU2.rsp", lo_freq=1.0,
-        up_freq=10.0):
+def main(in_file, out_file, prefix="--", plot_ext="eps",
+        rsp_matrix="./PCU2.rsp", lo_freq=1.0, up_freq=10.0):
     """
     Compute the phase lag and time lag from the average cross spectrum.
 
     Note that power_ci, power_ref, and cs_avg should be unnormalized and without
     noise subtracted.
 
-    """
+    Parameters
+    ----------
+    in_file : str
+        Name of the FITS file containing the cross spectrum, power spectrum of
+        the channels of interest, and power spectrum of the reference band.
+        Same as input file for get_lags.py. In format '*_cs.fits'.
 
-    energies_tab = np.loadtxt(energies_file)
+    out_file : str
+        Name of the FITS file to write the covariance spectrum to, in format
+        '*_cov.fits'.
+
+    prefix : str
+        The identifying prefix of the data (object nickname or data ID). [--]
+
+    plot_ext : str
+        File extension for the plots. Do not include the dot. [eps]
+
+    rsp_matrix : str
+        Local path name of the detector response matrix. [./PCU2.rsp]
+
+    lo_freq : float
+        The lower bound of the frequency range to average the covariance
+        spectrum over, inclusive, in Hz. [1.0]
+
+    up_freq : float
+        The upper bound of the frequency range to average the covariance
+        spectrum over, inclusive, in Hz. [1.0]
+
+    Files created
+    -------------
+    *_cov.fits :
+        The covariance spectrum, in FITS format (more robust for storing
+        floating point numbers).
+
+    *_cov.dat :
+        The covariance spectrum, in ASCII format (for use in ASCII2PHA).
+
+    *_cov.pha :
+        The covariance spectrum, in .pha spectrum format, for use in XSPEC.
+
+    temp_cov.dat, temp_cov.pha :
+        Temporary local files created because ASCII2PHA doesn't like how long
+        the filenames are.
+
+    *_cov_xspec.xcm :
+        XSPEC script that plots the covariance spectrum unfolded through the
+        detector response matrix and a power law of slope 1.
+
+    dump.txt
+        Temporary local file that the XSPEC output is piped (dumped) into.
+
+    *_cov.eps :
+        Plot of said covariance spectrum created by the XSPEC script.
+
+    """
 
     ## Get necessary information and data from the input file
     freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci, mean_rate_ref, \
             evt_list = get_lags.get_inputs(in_file)
 
+    ## Make frequency mask so that we're only averaging over the desired
+    ## frequency range
     low_freq_mask = freq >= lo_freq
     freq = freq[low_freq_mask]
+    upper_freq_mask = freq <= up_freq
+    freq = freq[upper_freq_mask]
+    freq_range = len(freq)
+
+    ## Apply frequency mask to cross spectrum and power spectra, and average
+    ## over the kept frequencies.
     cs_avg = cs_avg[low_freq_mask, :]
     power_ci = power_ci[low_freq_mask, :]
     power_ref = power_ref[low_freq_mask]
+    cs_avg = np.mean(cs_avg[upper_freq_mask, :], axis=0)
+    power_ci = np.mean(power_ci[upper_freq_mask, :], axis=0)
+    power_ref = np.repeat(np.mean(power_ref[upper_freq_mask], axis=0),
+            meta_dict['detchans'])
 
-    upper_freq_mask = freq <= up_freq
-    freq = freq[upper_freq_mask]
-    cs_avg = cs_avg[upper_freq_mask, :]
-    power_ci = power_ci[upper_freq_mask, :]
-    power_ref = power_ref[upper_freq_mask]
+    ## Compute the raw coherence
+    coherence = compute_coherence(cs_avg, power_ci, power_ref,
+            mean_rate_ci, mean_rate_ref, meta_dict, freq_range)
 
-    freq_range = len(freq)
+    ## Compute the covariance. Equation from Uttley et al 2014, footnote 8 on
+    ## page 18
+    covariance_spectrum = np.sqrt(coherence * (power_ci - \
+            (2.0 * mean_rate_ci)) * meta_dict['df'])
 
-    # print np.shape(cs_avg)
-    # print np.shape(power_ci)
-    # print np.shape(power_ref)
-
-    #####################################
-    ## Computing the covariance spectrum
-    #####################################
-
-    # print meta_dict['df']
-
-    cs_bias = bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, \
-            meta_dict, freq_range)
-
-    # print cs_bias
-    # print np.shape(cs_bias)
-    modsquare_min_bias = np.real(np.sum(cs_avg * np.conj(cs_avg) - cs_bias,
-            axis=0))
-
-    # print type(modsquare_min_bias[0])
-    # print np.shape(modsquare_min_bias)
-
-    abs_ref = power_ref * (2.0 * meta_dict['dt'] / float(freq_range)) - 0 ## Poisson errors on IR are weird.
-
-    ref_variance = np.sum(abs_ref * meta_dict['df'])
-    ref_rms = np.sqrt(ref_variance)
-
-    covariance_spectrum = np.sqrt(modsquare_min_bias) * freq_range / ref_rms
-
-    cov_errors = np.ones(meta_dict['detchans'])
-    # print covariance_spectrum
     print np.shape(covariance_spectrum)
-    print np.shape(cov_errors)
+    print covariance_spectrum[1:5]
 
+    # cov_errors =
+    exit()
     ##########
     ## Output
     ##########
@@ -352,7 +567,7 @@ def main(in_file, out_file, energies_file, plot_root="./covariance",
     #######################
     ## Plotting (in XSPEC)
     #######################
-
+    print rsp_matrix
     plot_in_xspec(meta_dict, out_file, rsp_matrix)
 
 
@@ -376,13 +591,13 @@ if __name__ == "__main__":
     parser.add_argument('outfile', help="Name of the FITS file to write the "\
             "covariance spectrum to, in format '*_cov.fits'.")
 
-    parser.add_argument('energies_file', help="Name of the txt file containing "\
-            "a list of the keV energies that map to the detector energy "\
-            "channels. Generated in rxte_reduce/channel_to_energies.py.")
-
-    parser.add_argument('-o', dest='plot_root', default="./plot", help="Root "\
-            "name for plots generated, to be appended with '_lag-freq.(ext"\
-            "ension)' and '_lag-energy.(extension)'. [./plot]")
+    # parser.add_argument('energies_file', help="Name of the txt file containing "\
+    #         "a list of the keV energies that map to the detector energy "\
+    #         "channels. Generated in rxte_reduce/channel_to_energies.py.")
+    #
+    # parser.add_argument('-o', dest='plot_root', default="./plot", help="Root "\
+    #         "name for plots generated, to be appended with '_lag-freq.(ext"\
+    #         "ension)' and '_lag-energy.(extension)'. [./plot]")
 
     parser.add_argument('--prefix', dest="prefix", default="--",
             help="The identifying prefix of the data (object nickname or "\
@@ -396,18 +611,17 @@ if __name__ == "__main__":
             "[./PCU2.rsp]")
 
     parser.add_argument('--lf', dest='lo_freq', default=1.0,
-            type=tools.type_positive_float, help="The lower limit of the "\
-            "frequency range for the lag-energy spectrum to be computed for, "\
-            "in Hz. [1.0]")
+            type=tools.type_positive_float, help="The lower bound of the "\
+            "frequency range to average the covariance spectrum over, "\
+            "inclusive, in Hz. [1.0]")
 
     parser.add_argument('--uf', dest='up_freq', default=10.0,
-            type=tools.type_positive_float, help="The upper limit of the "\
-            "frequency range for the lag-energy spectrum to be computed for, "\
-            "in Hz. [10.0]")
+            type=tools.type_positive_float, help="The upper bound of the "\
+            "frequency range to average the covariance spectrum over, "\
+            "inclusive, in Hz. [10.0]")
 
     args = parser.parse_args()
 
-    main(args.infile, args.outfile, args.energies_file, plot_root=args.plot_root,
-            prefix=args.prefix, plot_ext=args.plot_ext,
+    main(args.infile, args.outfile, prefix=args.prefix, plot_ext=args.plot_ext,
             rsp_matrix=args.rsp_matrix, lo_freq=args.lo_freq,
             up_freq=args.up_freq)
