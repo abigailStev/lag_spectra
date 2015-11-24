@@ -25,14 +25,17 @@ Plots multiple lag-energy spectra (from different observations, simulations,
 etc.) on the same plot.
 
 
+[![astropy]
+(http://img.shields.io/badge/powered%20by-AstroPy-orange.svg?style=flat)](http://www.astropy.org/) 
+
 ## Authors
 * Abigail Stevens (UvA API)
-
-Pull requests are welcome!
 
 ## Collaborators
 * Phil Uttley (UvA API)
 * Federico Vincentelli (INAF Roma, INAF Brera)
+
+Pull requests are welcome!
 
 ## License
 
@@ -40,6 +43,3 @@ All code is Copyright 2015 The Authors, and is distributed under the MIT
 Licence. See LICENSE for details. If you are interested in the further 
 development of lag_spectra, please [get in touch via the issues]
 (https://github.com/abigailstev/lag_spectra/issues)!
-
-[![astropy]
-(http://img.shields.io/badge/powered%20by-AstroPy-orange.svg?style=flat)](http://www.astropy.org/) 
