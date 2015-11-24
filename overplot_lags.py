@@ -183,11 +183,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     prefix = args.prefix
 
-    lag_dir = HOME_DIR + "/Dropbox/Research/lags/out_lags/" + prefix
-    sim_dir = HOME_DIR + "/Dropbox/Research/simulate/out_sim/" + prefix
-    plot_root = sim_dir + "/FAKE-" + prefix + "_"+day+"_wdata_w1BB"
-
-
     # ## Get necessary information and data from the input file
     # freq, cs_avg, power_ci, power_ref, dt, n_bins, DETCHANS, num_seconds, \
     #         num_seg, mean_rate_ci, mean_rate_ref, evt_list = lags.get_inputs(in_file)
@@ -240,18 +235,19 @@ if __name__ == "__main__":
     #         power_ref, dt, n_bins, DETCHANS, num_seconds, num_seg, mean_rate_ci, \
     #         mean_rate_ref, lo_freq, up_freq, lo_energy, up_energy)
 
-    in_file_list = [lag_dir + "/" + prefix + "_150902_t64_64sec_adj_lag.fits",
-                    # sim_dir + "/FAKE-" + prefix + "_150902_1BB-FS-G-fzs_lag.fits",
-                    # sim_dir + "/FAKE-" + prefix + "_150902_1BB-FS-G-E-fzs_lag.fits",
-                    # sim_dir + "/FAKE-" + prefix + "_150902_1BB-FS-G-NE-fzs_lag.fits",
-                    sim_dir + "/FAKE-" + prefix + "_150902_1BB-FS-G-Tin-fzs-fzNbb-wMCMC_lag.fits"]
+    lag_dir = HOME_DIR + "/Dropbox/Research/lag_spectra/out_lags/" + prefix
+#     sim_dir = HOME_DIR + "/Dropbox/Research/simulate/out_sim/" + prefix
+    plot_root = lag_dir + "/" + prefix + "_151119_t64_64sec_overpl_lag"
 
+    in_file_list = [lag_dir + "/" + prefix + "_151124_t64_64sec_adj_lag.fits",
+    				lag_dir + "/" + prefix + "_150814_t64_64sec_adj_lag.fits"]
+    				
     # labels = [r"PL norm & index, $\chi^{2}=165.8$",
     #           r"+ iron line energy, $\chi^{2}=144.4$",
     #           # r"+ iron line norm, $\chi^{2}=78.0$",
     #           r"+ BB temp, $\chi^{2}=37.8$",
     #           "Data"]
-    labels = ["Data", "Simulation"]
+    labels = ["New", "Old"]
 
     ################################################
     ## Calls method above to actually make the plot
