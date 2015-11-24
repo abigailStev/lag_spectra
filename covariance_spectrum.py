@@ -219,16 +219,10 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
     cov_spec_dat = out_file.replace("_cov.fits", "_cov.dat")
     cov_spec_pha = out_file.replace("_cov.fits", "_cov.pha")
 
-    # print cov_spec_dat
-    # print cov_spec_pha
-    # print os.path.dirname(out_file)
     out_dir = os.path.split(out_file)[0]
-    # print "Our dir:", out_dir
     os.chdir(out_dir)
-    # subprocess.call(['cd', out_dir])
     # print "Current dir:", os.getcwd()
 
-    # print "Cov spec pha:", cov_spec_pha
     assert os.path.isfile(cov_spec_dat), "ERROR: .dat file of covariance "\
             "spectra does not exist."
     subprocess.call(["cp", cov_spec_dat, "temp_cov.dat"])
@@ -236,8 +230,7 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
     assert os.path.isfile("temp_cov.dat"), "ERROR: temporary .dat file does "\
             "not exist."
 
-    # print cov_spec_dat
-    # print "./temp_cov.dat"
+    assert os.path.isfile(rsp_matrix), "ERROR: Response matrix does not exist."
 
     ## Set up the shell command for ascii2pha
     ascii2pha = ["ascii2pha",
@@ -387,6 +380,7 @@ def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
     temp_c = Pnoise_ref * Pnoise_ci
 
     n_squared = (temp_a + temp_b + temp_c) / (n_freq * meta_dict['n_seg'])
+
     return n_squared
 
 def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
@@ -443,8 +437,8 @@ def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
     #     power_ref = np.resize(np.repeat(power_ref, np.shape(power_ci)[1]),
     #             np.shape(power_ci))
 
-    cs_bias = bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref,
-            meta_dict, n_range)
+    cs_bias = bias_term(power_ci, power_ref, mean_rate_ci,
+            mean_rate_ref, meta_dict, n_range)
 
     temp_1 = power_ci * power_ref
     temp_2 = cross_spec * np.conj(cross_spec) - cs_bias
@@ -554,14 +548,37 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
     print np.shape(covariance_spectrum)
     print covariance_spectrum[1:5]
 
-    # cov_errors =
-    exit()
+    ## Normalizing power spectra to absolute rms normalization
+    ## Not subtracting the noise (yet)!
+    abs_ref = power_ref * (2.0 * meta_dict['dt'] / float(freq_range)) * \
+            meta_dict['df']
+
+    ## Poisson noise levels for absolute rms normalization
+    ## Equation in text just below eqn 14 in Uttley et al 2014, p 18
+    noise_rms_ci = 2.0 * mean_rate_ci * meta_dict['df']
+    noise_rms_ref = 2.0 * mean_rate_ref * meta_dict['df']
+
+    temp1 = covariance_spectrum ** 2 * noise_rms_ref
+    temp2 = abs_ref * noise_rms_ci
+    temp3 = noise_rms_ci * noise_rms_ref
+
+    # print abs_ref
+    # print np.shape(temp1)
+    # print np.shape(temp2)
+    # print np.shape(temp3)
+
+    covariance_err = np.sqrt((temp1 + temp2 + temp3) * meta_dict['df'] /
+            (4.0 * meta_dict['n_seg'] * abs_ref))
+
+    print np.shape(covariance_err)
+    print covariance_err[1:5]
+    # exit()
     ##########
     ## Output
     ##########
 
     fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
-            mean_rate_ci, mean_rate_ref, covariance_spectrum, cov_errors,
+            mean_rate_ci, mean_rate_ref, covariance_spectrum, covariance_err,
             freq_range)
 
     #######################
