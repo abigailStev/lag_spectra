@@ -1,7 +1,7 @@
 # lag_spectra
 Computes and plots frequency lags, energy lags, and covariance spectra for 
 cross-spectral analysis of a time series. The cross spectra and power spectra 
-are read in as a FITS file, created in ccf.py.
+are read in as a FITS file.
 
 ## Contents
 
