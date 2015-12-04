@@ -33,6 +33,7 @@ import numpy as np
 from astropy.io import fits
 from datetime import datetime
 import os.path
+from astropy.table import Table
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as font_manager
 from matplotlib.ticker import MultipleLocator
@@ -94,43 +95,29 @@ def get_inputs(in_file):
         write to the FITS header of the output file.
 
     """
+
     try:
-        fits_hdu = fits.open(in_file)
+        in_table = Table.read(in_file)
     except IOError:
-        print "\tERROR: File does not exist: %s" % in_file
+        print("\tERROR: File does not exist: %s" % in_file)
         exit()
 
-    evt_list = fits_hdu[0].header['EVTLIST']
+    freq = in_table['FREQUENCY']
+    cs_avg = in_table['CROSS']
+    power_ci = in_table['POWER_CI']
+    power_ref = in_table['POWER_REF']
 
-    meta_dict = {'dt': float(fits_hdu[0].header['DT']),
-                 'n_bins': int(fits_hdu[0].header['N_BINS']),
-                 'n_seg': int(fits_hdu[0].header['SEGMENTS']),
-                 'exposure': float(fits_hdu[0].header['EXPOSURE']),
-                 'detchans': int(fits_hdu[0].header['DETCHANS']),
-                 'n_seconds': float(fits_hdu[0].header['SEC_SEG']),
-                 'df': float(fits_hdu[0].header['DF'])}
-
-    rate_ci = np.asarray(fits_hdu[0].header['RATE_CI'].replace('[',\
+    evt_list = in_table.meta['EVTLIST']
+    meta_dict = {'dt': in_table.meta['DT'],
+                 'n_bins': in_table.meta['N_BINS'],
+                 'n_seg': in_table.meta['SEGMENTS'],
+                 'exposure': in_table.meta['EXPOSURE'],
+                 'detchans': in_table.meta['DETCHANS'],
+                 'n_seconds': in_table.meta['SEC_SEG'],
+                 'df': in_table.meta['DF']}
+    rate_ci = np.asarray(in_table.meta['RATE_CI'].replace('[',\
             '').replace(']','').split(','), dtype=np.float64)
-    rate_ref = float(fits_hdu[0].header['RATE_REF'])
-
-    cs_data = fits_hdu[1].data
-    powci_data = fits_hdu[2].data
-    powref_data = fits_hdu[3].data
-
-    try:
-        cs_avg = np.reshape(cs_data.field('CROSS'),
-                (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans']), order='C')
-        power_ci = np.reshape(powci_data.field('POWER'),
-                (meta_dict['n_bins'] / 2 + 1, meta_dict['detchans']), order='C')
-    except ValueError:
-        cs_avg = np.reshape(cs_data.field('CROSS'), (meta_dict['n_bins'],
-                meta_dict['detchans']), order='C')
-        power_ci = np.reshape(powci_data.field('POWER'), (meta_dict['n_bins'],
-                meta_dict['detchans']), order='C')
-
-    power_ref = powref_data.field('POWER')
-    freq = powref_data.field('FREQUENCY')
+    rate_ref = in_table.meta['RATE_REF']
 
     return freq, cs_avg, power_ci, power_ref, meta_dict, rate_ci, rate_ref, \
             evt_list
