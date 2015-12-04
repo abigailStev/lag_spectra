@@ -172,6 +172,48 @@ def dat_out(out_file, cov_spectrum, cov_error, detchans=64):
 
 
 ################################################################################
+def var_and_rms(power, df):
+    """
+    Computes the variance and rms (root mean square) of a power spectrum.
+    Assumes the negative-frequency powers have been removed. DOES NOT WORK ON
+    2-D POWER ARRAYS! Not sure why.
+
+    TODO: cite textbook or paper.
+
+    Parameters
+    ----------
+    power : np.array of floats
+        1-D array (size = n_bins/2+1) of the raw power at each of the *positive*
+        Fourier frequencies.
+
+    df : float
+        The step size between Fourier frequencies.
+
+    Returns
+    -------
+    variance : float
+        The variance of the power spectrum.
+
+    rms : float
+        The rms of the power spectrum.
+
+    """
+
+    # print "Shape power:", np.shape(power)
+    # print "Nonzero power:", power[np.where(power<=0.0)]
+    variance = np.sum(power * df)
+    # print np.shape(variance)
+    # print "Variance:", variance
+    # if variance > 0:
+    #     rms = np.sqrt(variance)
+    # else:
+    #     rms = np.nan
+    rms = np.where(variance >= 0, np.sqrt(variance), np.nan)
+    # print "rms:", rms
+    return variance, rms
+
+
+################################################################################
 def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
     """
     Save the covariance spectrum as a local .dat file, converts that to a .pha
@@ -221,7 +263,6 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
 
     out_dir = os.path.split(out_file)[0]
     os.chdir(out_dir)
-    # print "Current dir:", os.getcwd()
 
     assert os.path.isfile(cov_spec_dat), "ERROR: .dat file of covariance "\
             "spectra does not exist."
@@ -256,14 +297,14 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
             stdin=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
     p.communicate()  ## Waits for the command to finish running.
 
-    print os.getcwd()
-    print "./temp_cov.pha"
+    # print os.getcwd()
+    # print "./temp_cov.pha"
 
     assert os.path.isfile("./temp_cov.pha"), "ERROR: ASCII2PHA did not work. "\
             "temp_cov.pha does not exist."
 
     os.rename("./temp_cov.pha", cov_spec_pha)
-    print "Cov spec pha:", cov_spec_pha
+    # print "Cov spec pha:", cov_spec_pha
     assert os.path.isfile(cov_spec_pha), "ERROR: ASCII2PHA did not work. "\
             "cov_spec_pha does not exist: %s" % cov_spec_pha
 
@@ -382,6 +423,7 @@ def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
     n_squared = (temp_a + temp_b + temp_c) / (n_freq * meta_dict['n_seg'])
 
     return n_squared
+
 
 def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
         mean_rate_ref, meta_dict, n_range):
@@ -524,7 +566,8 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
     freq = freq[low_freq_mask]
     upper_freq_mask = freq <= up_freq
     freq = freq[upper_freq_mask]
-    freq_range = len(freq)
+    n_freq_bins = len(freq)
+    delta_freq = up_freq - lo_freq
 
     ## Apply frequency mask to cross spectrum and power spectra, and average
     ## over the kept frequencies.
@@ -538,7 +581,7 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
 
     ## Compute the raw coherence
     coherence = compute_coherence(cs_avg, power_ci, power_ref,
-            mean_rate_ci, mean_rate_ref, meta_dict, freq_range)
+            mean_rate_ci, mean_rate_ref, meta_dict, n_freq_bins)
 
     ## Compute the covariance. Equation from Uttley et al 2014, footnote 8 on
     ## page 18
@@ -550,16 +593,17 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
 
     ## Normalizing power spectra to absolute rms normalization
     ## Not subtracting the noise (yet)!
-    abs_ref = power_ref * (2.0 * meta_dict['dt'] / float(freq_range)) * \
+    abs_ref_pow = power_ref * (2.0 * meta_dict['dt'] / float(n_freq_bins)) * \
             meta_dict['df']
+    ref_var, rms = var_and_rms(abs_ref_pow, meta_dict['df'])
 
     ## Poisson noise levels for absolute rms normalization
     ## Equation in text just below eqn 14 in Uttley et al 2014, p 18
-    noise_rms_ci = 2.0 * mean_rate_ci * meta_dict['df']
-    noise_rms_ref = 2.0 * mean_rate_ref * meta_dict['df']
+    noise_rms_ci = 2.0 * mean_rate_ci * delta_freq
+    noise_rms_ref = 2.0 * mean_rate_ref * delta_freq
 
     temp1 = covariance_spectrum ** 2 * noise_rms_ref
-    temp2 = abs_ref * noise_rms_ci
+    temp2 = ref_var * noise_rms_ci
     temp3 = noise_rms_ci * noise_rms_ref
 
     # print abs_ref
@@ -567,8 +611,8 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
     # print np.shape(temp2)
     # print np.shape(temp3)
 
-    covariance_err = np.sqrt((temp1 + temp2 + temp3) * meta_dict['df'] /
-            (4.0 * meta_dict['n_seg'] * abs_ref))
+    covariance_err = np.sqrt((temp1 + temp2 + temp3) /
+            (4.0 * meta_dict['n_seg'] * n_freq_bins * ref_var))
 
     print np.shape(covariance_err)
     print covariance_err[1:5]
@@ -579,7 +623,7 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
 
     fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
             mean_rate_ci, mean_rate_ref, covariance_spectrum, covariance_err,
-            freq_range)
+            n_freq_bins)
 
     #######################
     ## Plotting (in XSPEC)
