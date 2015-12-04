@@ -4,9 +4,9 @@ Computes the phase lag and time lag of energy channels of interest with a
 reference energy band from the average cross spectrum. Can average over
 frequency and over energy.
 
-Reads from a FITS file where constants are in extension 0 header, cross spectrum
-is in extension 1, power spectrum of interest bands are in extension 2, and
-power spectrum of reference band is in extension 3.
+Reads from a FITS file where frequency, raw cross spectrum, raw power spectra of
+channels of interest, and raw power spectrum of reference band are saved as an
+astropy table in FITS extension 1. Header info is also in extension 1.
 
 Files created
 -------------
