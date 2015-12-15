@@ -566,7 +566,7 @@ def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
     temp_2 = cross_spec * np.conj(cross_spec) - cs_bias
     with np.errstate(all='ignore'):
         coherence = np.where(temp_1 != 0, temp_2 / temp_1, 0)
-    print "Coherence shape:", np.shape(coherence)
+    # print "Coherence shape:", np.shape(coherence)
     # print coherence
     return np.real(coherence)
 
@@ -619,9 +619,9 @@ def get_phase_err(cs_avg, power_ci, power_ref, mean_rate_ci, mean_rate_ref,
 
     """
 
-    print "Pow ci:", np.shape(power_ci)
-    print "Pow ref:", np.shape(power_ref)
-    print "Pow cs:", np.shape(cs_avg)
+    # print "Pow ci:", np.shape(power_ci)
+    # print "Pow ref:", np.shape(power_ref)
+    # print "Pow cs:", np.shape(cs_avg)
 
     # coherence = np.where(a != 0, cs_avg * np.conj(cs_avg) / a, 0)
     coherence = compute_coherence(cs_avg, power_ci, power_ref, mean_rate_ci,
@@ -750,7 +750,7 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
     erange_pow_ci = np.mean(power_ci[:, lo_energy:up_energy + 1], axis=1)
     erange_pow_ref = power_ref
 
-    print "E range cs:", np.shape(erange_cs)
+    # print "E range cs:", np.shape(erange_cs)
 
     ############################################
     ## Getting lag and error for frequency lags
@@ -758,7 +758,7 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
 
     ## Negative sign is so that a positive lag is a hard energy lag
     f_phase = -np.arctan2(erange_cs.imag, erange_cs.real)
-    print np.shape(f_phase)
+    # print np.shape(f_phase)
     f_err_phase = get_phase_err(erange_cs, erange_pow_ci, erange_pow_ref,
             np.mean(mean_rate_ci[lo_energy:up_energy + 1]), mean_rate_ref,
             meta_dict, e_span)
