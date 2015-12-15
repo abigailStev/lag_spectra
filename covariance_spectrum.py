@@ -6,6 +6,9 @@ spectrum of the reference band, power spectra of the channels of interest, and
 cross spectrum have already been computed, and are not normalized or Poisson-
 noise-subtracted.
 
+Notes: HEASOFT 6.11.* and Python 2.7.* (with supporting libraries) must be
+installed in order to run this script.
+
 Files created
 -------------
 *_cov.fits :
@@ -13,14 +16,15 @@ Files created
     point numbers).
 
 *_cov.dat :
-    The covariance spectrum, in ASCII format (for use in ASCII2PHA).
+    The covariance spectrum, in ASCII format (for use in ASCII2PHA). Gets
+    deleted after *_cov.pha is created (to save disk space).
 
 *_cov.pha :
     The covariance spectrum, in .pha spectrum format, for use in XSPEC.
 
 temp_cov.dat, temp_cov.pha :
     Temporary local files created because ASCII2PHA doesn't like how long the
-    filenames are.
+    filenames are. Get deleted after use to save disk space.
 
 *_cov_xspec.xcm :
     XSPEC script that plots the covariance spectrum unfolded through the
@@ -40,21 +44,23 @@ import numpy as np
 import argparse
 import os
 import subprocess
-from astropy.io import fits
+from astropy.table import Table
 from astropy.io import ascii
-import astropy.table
+from datetime import datetime
+
+## These are things I've written.
+## Their directories are in my PYTHONPATH bash environment variable.
 import ccf_lightcurves as ccf_lc
 import get_lags
 import tools
-from datetime import datetime
 
 ################################################################################
 def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
         mean_rate_ci, mean_rate_ref, covariance_spectrum, cov_error,
         freq_range):
     """
-    Writes the covariance spectrum to a FITS output file.
-    Header info is in extension 0, covariance spectra data is in extension 1.
+    Writes the covariance spectrum to a FITS output file from an astropy table.
+    Data and header are in extension 1.
 
     Parameters
     ----------
@@ -83,59 +89,47 @@ def fits_out(out_file, in_file, evt_list, meta_dict, lo_freq, up_freq,
 
     Returns
     -------
-    Nothing, but writes to the file '*_cov.fits'.
+    Nothing, but writes to the file '*_cov.fits' (and calls dat_out which writes
+    '*_cov.dat').
 
     """
 
-    chan = np.arange(0, meta_dict['detchans'])
-
-    print "Output sent to: %s" % out_file
-
-    ## Making FITS header (extension 0)
-    prihdr = fits.Header()
-    prihdr.set('TYPE', "Covariance spectrum")
-    prihdr.set('DATE', str(datetime.now()), "YYYY-MM-DD localtime")
-    prihdr.set('EVTLIST', evt_list)
-    prihdr.set('CS_DATA', in_file)
-    prihdr.set('DT', meta_dict['dt'], "seconds")
-    prihdr.set('DF', meta_dict['df'], "Hz")
-    prihdr.set('N_BINS', meta_dict['n_bins'], "time bins per segment")
-    prihdr.set('SEGMENTS', meta_dict['n_seg'], "segments in the whole light curve")
-    prihdr.set('SEC_SEG', meta_dict['n_seconds'], "seconds, per segment")
-    prihdr.set('EXPOSURE', meta_dict['exposure'], "seconds, of light curve")
-    prihdr.set('DETCHANS', meta_dict['detchans'], "Number of detector energy channels")
-    prihdr.set('F_RANGE', freq_range, "Number of frequencies kept")
-    prihdr.set('LAG_LF', lo_freq, "Hz")
-    prihdr.set('LAG_UF', up_freq, "Hz")
-    prihdr.set('RATE_CI', str(mean_rate_ci.tolist()), "counts/second")
-    prihdr.set('RATE_REF', mean_rate_ref, "counts/second")
-    prihdu = fits.PrimaryHDU(header=prihdr)
-
-    ## Making FITS table of covariance spectrum (extension 1)
-    col1 = fits.Column(name='CHANNEL', format='D', array=chan)
-    col2 = fits.Column(name='COVARIANCE', unit='counts', format='D',
-                       array=covariance_spectrum)
-    col3 = fits.Column(name='ERROR', unit='counts', format='D',
-                       array=cov_error)
-    cols = fits.ColDefs([col1, col2, col3])
-    tbhdu = fits.BinTableHDU.from_columns(cols)
-
-    ## Check that filename  has FITS file extension.
+    ## Check that filename has FITS file extension.
     assert out_file[-4:].lower() == "fits", "ERROR: Output file must have "\
             "extension '.fits'."
 
-    ## Writing to a FITS file
-    thdulist = fits.HDUList([prihdu, tbhdu])
-    thdulist.writeto(out_file, clobber=True)
+    print "Output sent to: %s" % out_file
 
-    ## Calling dat_out to save the covariance spectrum to a dat file, for
+    out_table = Table([np.arange(meta_dict['detchans']),
+            covariance_spectrum, cov_error], names=("CHAN", "COVARIANCE",
+            "ERROR"))
+
+    out_table.meta['TYPE'] = "Covariance spectrum"
+    out_table.meta['DATE'] = str(datetime.now())
+    out_table.meta['EVTLIST'] = evt_list
+    out_table.meta['CS_DATA'] = in_file
+    out_table.meta['DT'] = meta_dict['dt']
+    out_table.meta['DF'] = meta_dict['df']
+    out_table.meta['N_BINS'] = meta_dict['n_bins']
+    out_table.meta['SEGMENTS'] = meta_dict['n_seg']
+    out_table.meta['SEC_SEG'] = meta_dict['n_seconds']
+    out_table.meta['EXPOSURE'] = meta_dict['exposure']
+    out_table.meta['DETCHANS'] = meta_dict['detchans']
+    out_table.meta['F_RANGE'] = freq_range
+    out_table.meta['LAG_LF'] = lo_freq
+    out_table.meta['LAG_UF'] = up_freq
+    out_table.meta['RATE_CI'] = str(mean_rate_ci.tolist())
+    out_table.meta['RATE_REF'] = mean_rate_ref
+
+    out_table.write(out_file, overwrite=True)
+
+    ## Calling dat_out to save the covariance spectrum to a .dat file, for
     ## the heasoft FTOOL ASCII2PHA
-    dat_out(out_file, covariance_spectrum, cov_error,
-            detchans=meta_dict['detchans'])
+    dat_out(out_file, out_table)
 
 
 ################################################################################
-def dat_out(out_file, cov_spectrum, cov_error, detchans=64):
+def dat_out(out_file, out_table):
     """
     Save the covariance spectrum to a ".dat" file for later use in ascii2pha,
     for XSPEC.
@@ -147,12 +141,10 @@ def dat_out(out_file, cov_spectrum, cov_error, detchans=64):
         output file, but with .dat extension. If it has ".fits" on the end,
         replaces it with ".dat".
 
-    cov_spectrum, cov_error : np.arrays of floats
-        1-D arrays (size = detchans) of the covariance spectrum and error,
-        averaged over the previously specified frequency range.
-
-    detchans : int
-        The number of detector energy channels for the data mode. [64]
+    out_table : astropy.table.Table
+        Table containing 3 columns: energy channel (int), covariance (float),
+        and error on covariance (float). All three columns are 1-dimension with
+        size = (detchans).
 
     Returns
     -------
@@ -163,8 +155,6 @@ def dat_out(out_file, cov_spectrum, cov_error, detchans=64):
     if ".fits" in out_file.lower():
         out_file = out_file.replace(".fits", ".dat")
 
-    out_table = astropy.table.Table([np.arange(detchans), cov_spectrum,
-            cov_error], names=("#CHAN", "COV", "ERR"))
     ascii.write(out_table, out_file, format='no_header', fast_writer=True)
 
     assert os.path.isfile(out_file), "ERROR: Saving covariance spectrum to "\
@@ -178,7 +168,7 @@ def var_and_rms(power, df):
     Assumes the negative-frequency powers have been removed. DOES NOT WORK ON
     2-D POWER ARRAYS! Not sure why.
 
-    TODO: cite textbook or paper.
+    TODO: cite textbook or paper. Probably Michiel's big review paper from 2005?
 
     Parameters
     ----------
@@ -238,14 +228,15 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
     Files created
     -------------
     *_cov.dat
-        The covariance spectrum, in ASCII format.
+        The covariance spectrum, in ASCII format. Gets deleted after *_cov.pha
+        is successfully created.
 
     *_cov.pha
         The covariance spectrum, in .pha spectrum format, for use in XSPEC.
 
     temp_cov.dat, temp_cov.pha
         Temporary local files created because ASCII2PHA doesn't like how long
-        the filenames are.
+        the filenames are. Get deleted after use.
 
     *_cov_xspec.xcm
         XSPEC script that plots the covariance spectrum unfolded through the
@@ -307,6 +298,11 @@ def plot_in_xspec(meta_dict, out_file, rsp_matrix="./PCU2.rsp", prefix="--"):
     # print "Cov spec pha:", cov_spec_pha
     assert os.path.isfile(cov_spec_pha), "ERROR: ASCII2PHA did not work. "\
             "cov_spec_pha does not exist: %s" % cov_spec_pha
+
+    ## Removing the .dat file, once the .pha is created, to save disk space
+    ## Also removing the temporary file (.pha temp is already removed/renamed)
+    os.remove(cov_spec_dat)
+    os.remove("./temp_cov.dat")
 
     ## Writing the xspec script file
     xspec_cmd_file = out_file.replace("_cov.fits", "_cov_xspec.xcm")
@@ -404,8 +400,8 @@ def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
     Pnoise_ref = mean_rate_ref * 2.0
     Pnoise_ci = mean_rate_ci * 2.0
 
-    print np.shape(Pnoise_ref)
-    print np.shape(Pnoise_ci)
+    # print np.shape(Pnoise_ref)
+    # print np.shape(Pnoise_ci)
 
     ## Normalizing power spectra to absolute rms normalization
     ## Not subtracting the noise (yet)!
@@ -486,7 +482,7 @@ def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
     temp_2 = cross_spec * np.conj(cross_spec) - cs_bias
     with np.errstate(all='ignore'):
         coherence = np.where(temp_1 != 0, temp_2 / temp_1, 0)
-    print "Coherence shape:", np.shape(coherence)
+    # print "Coherence shape:", np.shape(coherence)
     # print coherence
     return np.real(coherence)
 
@@ -588,8 +584,8 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
     covariance_spectrum = np.sqrt(coherence * (power_ci - \
             (2.0 * mean_rate_ci)) * meta_dict['df'])
 
-    print np.shape(covariance_spectrum)
-    print covariance_spectrum[1:5]
+    # print np.shape(covariance_spectrum)
+    # print covariance_spectrum[1:5]
 
     ## Normalizing power spectra to absolute rms normalization
     ## Not subtracting the noise (yet)!
@@ -610,13 +606,14 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
     # print np.shape(temp1)
     # print np.shape(temp2)
     # print np.shape(temp3)
+    # print (temp1 + temp2 + temp3) / (4.0 * meta_dict['n_seg'] * n_freq_bins * ref_var)
+    with np.errstate(all='ignore'):
+        covariance_err = np.sqrt((temp1 + temp2 + temp3) /
+                (4.0 * meta_dict['n_seg'] * n_freq_bins * ref_var))
 
-    covariance_err = np.sqrt((temp1 + temp2 + temp3) /
-            (4.0 * meta_dict['n_seg'] * n_freq_bins * ref_var))
+    # print np.shape(covariance_err)
+    # print covariance_err[1:5]
 
-    print np.shape(covariance_err)
-    print covariance_err[1:5]
-    # exit()
     ##########
     ## Output
     ##########
@@ -625,10 +622,11 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
             mean_rate_ci, mean_rate_ref, covariance_spectrum, covariance_err,
             n_freq_bins)
 
-    #######################
-    ## Plotting (in XSPEC)
-    #######################
-    print rsp_matrix
+    ###################
+    ## Plot (in XSPEC)
+    ###################
+
+    # print rsp_matrix
     plot_in_xspec(meta_dict, out_file, rsp_matrix)
 
 
@@ -651,14 +649,6 @@ if __name__ == "__main__":
 
     parser.add_argument('outfile', help="Name of the FITS file to write the "\
             "covariance spectrum to, in format '*_cov.fits'.")
-
-    # parser.add_argument('energies_file', help="Name of the txt file containing "\
-    #         "a list of the keV energies that map to the detector energy "\
-    #         "channels. Generated in rxte_reduce/channel_to_energies.py.")
-    #
-    # parser.add_argument('-o', dest='plot_root', default="./plot", help="Root "\
-    #         "name for plots generated, to be appended with '_lag-freq.(ext"\
-    #         "ension)' and '_lag-energy.(extension)'. [./plot]")
 
     parser.add_argument('--prefix', dest="prefix", default="--",
             help="The identifying prefix of the data (object nickname or "\
