@@ -60,17 +60,15 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
 
     """
 
-    colours = ["black",
-               "blue",
+    colours = ["blue",
                "green",
                "magenta",
-               "orange"]
+               "black"]
 
-    markers = ['o',
-               'd',
-               '*',
-               '.',
-               'x']
+    markers = ['d',
+               'x',
+               's',
+               'o']
 
     #######################
     ## Setting up the plot
@@ -94,7 +92,7 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
 
     fig, ax = plt.subplots(1, 1, figsize=(10,7.5), dpi=300, tight_layout=True)
 
-    ax.hlines(0.0, 3, 21, linestyle='dashed', lw=2, color='gray')
+    ax.hlines(0.0, 3, 21, linestyle='dashed', lw=2, color='black')
 
     ## Deleting the values at energy channel 10 for RXTE PCA event-mode data
     if DETCHANS == 64:
@@ -121,10 +119,22 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
             tlag = np.delete(tlag, 10)
             tlag_err = np.delete(tlag_err, 10)
 
-            ax.errorbar(energy_list[2:26], tlag[2:26], xerr=energy_err[2:26],
-                    yerr=tlag_err[2:26], ls='none', marker=markers[i], ms=10,
-                    mew=2, mec=colours[i], mfc=colours[i], ecolor=colours[i],
-                    elinewidth=2, capsize=0, label=labels[i])
+            if labels[i].lower() == "data":
+                print "In Here!"
+
+
+                ax.errorbar(energy_list[2:26], tlag[2:26],
+                        xerr=energy_err[2:26], yerr=tlag_err[2:26], ls='none',
+                        marker=markers[i], ms=10, mew=2, mec=colours[i],
+                        mfc=colours[i], ecolor=colours[i], elinewidth=3,
+                        capsize=0, label=labels[i])
+
+            else:
+                ax.errorbar(energy_list[2:26], tlag[2:26],
+                        xerr=energy_err[2:26], yerr=tlag_err[2:26], lw=3,
+                        drawstyle='steps-mid', marker=markers[i], ms=8, mew=2, mec=colours[i], color=colours[i], ecolor=colours[i],
+                        elinewidth=3, capsize=0, label=labels[i])
+
         else:
             ax.errorbar(energy_list, tlag, xerr=energy_err,
                     yerr=tlag_err, ls='none', marker=markers[i], ms=10, mew=2,
@@ -240,18 +250,24 @@ if __name__ == "__main__":
     #         mean_rate_ref, lo_freq, up_freq, lo_energy, up_energy)
 
     lag_dir = HOME_DIR + "/Dropbox/Research/lag_spectra/out_lags/" + prefix
-#     sim_dir = HOME_DIR + "/Dropbox/Research/simulate/out_sim/" + prefix
-    plot_root = lag_dir + "/" + prefix + "_151119_t64_64sec_overpl_lag"
+    sim_dir = HOME_DIR + "/Dropbox/Research/simulate/out_sim/" + prefix
+    plot_root = lag_dir + "/" + prefix + "_151204_t64_64sec_overpl_lag"
 
-    in_file_list = [lag_dir + "/" + prefix + "_151124_t64_64sec_adj_lag.fits",
-    				lag_dir + "/" + prefix + "_150814_t64_64sec_adj_lag.fits"]
+    # in_file_list = [lag_dir + "/" + prefix + "_151124_t64_64sec_adj_lag.fits",
+    # 				lag_dir + "/" + prefix + "_150814_t64_64sec_adj_lag.fits"]
+
+    in_file_list = [sim_dir + "/bootstrapped/" + prefix + "_151204_1BB-FS-G-Tin-fzs-fzNbb_lag.fits",
+    				sim_dir + "/bootstrapped/" + prefix + "_151204_2BB-FS-G-kT-fzs-fzNbb_lag.fits",
+                    sim_dir + "/" + prefix + "_151204_1BB-FS-G_lag.fits",
+                    lag_dir + "/" + prefix + "_151204_t64_64sec_adj_lag.fits"]
     				
     # labels = [r"PL norm & index, $\chi^{2}=165.8$",
     #           r"+ iron line energy, $\chi^{2}=144.4$",
     #           # r"+ iron line norm, $\chi^{2}=78.0$",
     #           r"+ BB temp, $\chi^{2}=37.8$",
     #           "Data"]
-    labels = ["New", "Old"]
+    # labels = ["New", "Old"]
+    labels = ["Model 1", "Model 2", "Only PL", "Data"]
 
     ################################################
     ## Calls method above to actually make the plot
