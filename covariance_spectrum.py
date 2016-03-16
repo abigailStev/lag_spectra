@@ -38,7 +38,7 @@ dump.txt
 
 """
 __author__ = 'Abigail Stevens <A.L.Stevens at uva.nl>'
-__year__ = "2015"
+__year__ = "2015-2016"
 
 import numpy as np
 import argparse
@@ -359,18 +359,18 @@ def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
     the covariance spectrum. Equation in Equation in footnote 4 (section 2.1.3,
     page 12) of Uttley et al. 2014.
 
-    Assumes power spectra are raw (not at all normalized, and not Poisson-noise-
-    subtracted).
+    Assumes power spectra are absolute rms^2 normalized and NOT Poisson-noise-
+    subtracted.
 
     Parameters
     ----------
     power_ci : np.array of floats
-        2-D array of the power in the channels of interest, raw (not normalized
+        2-D array of the power in the channels of interest, absolute rms^2 norm
         and not Poisson-noise-subtracted), of the frequencies to be averaged
         over. Size = (n_freq, detchans)
 
     power_ref : np.array of floats
-        1-D array of the power in the reference band, raw (not normalized and
+        1-D array of the power in the reference band, absolute rms^2 norm and
         not Poisson-noise-subtracted), of the frequencies to be averaged over.
         Size = (n_freq).
 
@@ -396,35 +396,27 @@ def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
         Uttley et al. 2014.
 
     """
-    ## Compute the Poisson noise level in absolute rms units
-    Pnoise_ref = mean_rate_ref * 2.0
-    Pnoise_ci = mean_rate_ci * 2.0
-
-    # print np.shape(Pnoise_ref)
-    # print np.shape(Pnoise_ci)
-
-    ## Normalizing power spectra to absolute rms normalization
-    ## Not subtracting the noise (yet)!
-    abs_ci = power_ci * (2.0 * meta_dict['dt'] / float(n_freq))
-    abs_ref = power_ref * (2.0 * meta_dict['dt'] / float(n_freq))
+    ## Compute the Poisson noise level in absolute rms^2 units
+    Pnoise_ref = 2.0 * mean_rate_ref
+    Pnoise_ci = 2.0 * mean_rate_ci
 
     ## Reshaping (broadcasting) the ref to have same size as ci
-    abs_ref = np.resize(np.repeat(abs_ref, meta_dict['detchans']),
-        np.shape(abs_ci))
+    power_ref = np.resize(np.repeat(power_ref, meta_dict['detchans']),
+        np.shape(power_ci))
 
-    temp_a = (abs_ref - Pnoise_ref) * Pnoise_ci
-    temp_b = (abs_ci - Pnoise_ci) * Pnoise_ref
+    temp_a = (power_ref - Pnoise_ref) * Pnoise_ci
+    temp_b = (power_ci - Pnoise_ci) * Pnoise_ref
     temp_c = Pnoise_ref * Pnoise_ci
 
     n_squared = (temp_a + temp_b + temp_c) / (n_freq * meta_dict['n_seg'])
 
     return n_squared
 
-
+################################################################################
 def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
         mean_rate_ref, meta_dict, n_range):
     """
-    Compute the raw coherence of the cross spectrum. Coherence equation from
+    Compute the coherence of the cross spectrum. Coherence equation from
     Uttley et al 2014 eqn 11, bias term equation from footnote 4 on same page.
 
     Parameters
@@ -432,20 +424,21 @@ def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
     cross_spec : np.array of complex numbers
         1-D array of the cross spectrum, averaged over the desired energy
         range or frequency range. Size = detchans (if avg over freq) or
-        n_bins/2+1 (if avg over energy). Should be raw, not normalized or
-        noise-subtracted. Eqn 9 of Uttley et al 2014.
+        n_bins/2+1 (if avg over energy). Should be absolute rms^2 normalized and
+        NOT noise-subtracted. Eqn 9 of Uttley et al 2014.
 
     power_ci : np.array of floats
         1-D array of the channel of interest power spectrum, averaged over the
         desired energy range or frequency range. Size = detchans (if avg over
-        freq) or n_bins/2+1 (if avg over energy). Should be raw, not normalized
-        or Poisson-noise-subtracted.
+        freq) or n_bins/2+1 (if avg over energy). Should be absolute rms^2
+        normalized and NOT Poisson-noise-subtracted.
 
     power_ref : np.array of floats
         1-D array of the reference band power spectrum, possibly averaged over
         the desired frequency range. Size = n_bins/2+1 (if avg over energy) or
-        detchans (if avg over freq; same thing repeated, to be same size as
-        power_ci). Should be raw, not normalized or Poisson-noise-subtracted.
+        detchans (if avg over freq; tiled down second axis to be same size as
+        power_ci). Should be absolute rms^2 normalized and NOT Poisson-noise-
+        subtracted.
 
     mean_rate_ci : np.array of floats
         1-D array of the mean count rates of the channels of interest, in cts/s.
@@ -465,21 +458,16 @@ def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
     Returns
     -------
     coherence : np.array of floats
-        The raw coherence of the cross spectrum. (Uttley et al 2014, eqn 11)
+        The coherence of the cross spectrum. (Uttley et al 2014, eqn 11)
         Size = n_bins/2+1 (if avg over energy) or detchans (if avg over freq).
 
     """
 
-    ## Reshaping (broadcasting) the ref to have same size as ci
-    # if np.shape(power_ref) != np.shape(power_ci):
-    #     power_ref = np.resize(np.repeat(power_ref, np.shape(power_ci)[1]),
-    #             np.shape(power_ci))
-
-    cs_bias = bias_term(power_ci, power_ref, mean_rate_ci,
-            mean_rate_ref, meta_dict, n_range)
+    cs_bias = bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref,
+            meta_dict, n_range)
 
     temp_1 = power_ci * power_ref
-    temp_2 = cross_spec * np.conj(cross_spec) - cs_bias
+    temp_2 = cross_spec * np.conj(cross_spec) - cs_bias ** 2
     with np.errstate(all='ignore'):
         coherence = np.where(temp_1 != 0, temp_2 / temp_1, 0)
     # print "Coherence shape:", np.shape(coherence)
@@ -558,61 +546,60 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
 
     ## Make frequency mask so that we're only averaging over the desired
     ## frequency range
-    low_freq_mask = freq >= lo_freq
-    freq = freq[low_freq_mask]
-    upper_freq_mask = freq <= up_freq
-    freq = freq[upper_freq_mask]
+    freq_mask = (freq >= lo_freq) & (freq <= up_freq)
+    freq = freq[freq_mask]
     n_freq_bins = len(freq)
     delta_freq = up_freq - lo_freq
 
     ## Apply frequency mask to cross spectrum and power spectra, and average
     ## over the kept frequencies.
-    cs_avg = cs_avg[low_freq_mask, :]
-    power_ci = power_ci[low_freq_mask, :]
-    power_ref = power_ref[low_freq_mask]
-    cs_avg = np.mean(cs_avg[upper_freq_mask, :], axis=0)
-    power_ci = np.mean(power_ci[upper_freq_mask, :], axis=0)
-    power_ref = np.repeat(np.mean(power_ref[upper_freq_mask], axis=0),
+    cs_avg = np.mean(cs_avg[freq_mask, :], axis=0)
+    power_ci = np.mean(power_ci[freq_mask, :], axis=0)
+    power_ref = np.repeat(np.mean(power_ref[freq_mask], axis=0),
             meta_dict['detchans'])
 
+    ## Apply absolute rms^2 normalization to the cross spectrum and power
+    ## spectra
+    cs_norm = cs_avg * (2.0 * meta_dict['dt'] / float(n_freq_bins))
+    norm_ci = power_ci * (2.0 * meta_dict['dt'] / float(n_freq_bins))
+    norm_ref = power_ref * (2.0 * meta_dict['dt'] / float(n_freq_bins))
+
     ## Compute the raw coherence
-    coherence = compute_coherence(cs_avg, power_ci, power_ref,
+    coherence = compute_coherence(cs_norm, norm_ci, norm_ref,
             mean_rate_ci, mean_rate_ref, meta_dict, n_freq_bins)
 
     ## Compute the covariance. Equation from Uttley et al 2014, footnote 8 on
     ## page 18
-    covariance_spectrum = np.sqrt(coherence * (power_ci - \
-            (2.0 * mean_rate_ci)) * meta_dict['df'])
+    ## It's possible that at the very high energy channels (that you won't want
+    ## to use anyway) to over-subtract the noise level from the absolute-
+    ## normalized power spectrum. We just tell it to assign a value of zero
+    ## here.
+    Pnoise_ci = 2.0 * mean_rate_ci
+    Pnoise_ref = 2.0 * mean_rate_ref
 
-    # print np.shape(covariance_spectrum)
-    # print covariance_spectrum[1:5]
+    ## There should possibly be a *delta_freq in the next expression?
+    under_the_sqrt = coherence * (norm_ci - (Pnoise_ci)) * \
+                     meta_dict['df']
+    with np.errstate(all='ignore'):
+        covariance_spectrum = np.where(under_the_sqrt > 0,
+                np.sqrt(under_the_sqrt), 0)
 
-    ## Normalizing power spectra to absolute rms normalization
-    ## Not subtracting the noise (yet)!
-    abs_ref_pow = power_ref * (2.0 * meta_dict['dt'] / float(n_freq_bins)) * \
-            meta_dict['df']
-    ref_var, rms = var_and_rms(abs_ref_pow, meta_dict['df'])
+    ## 'Integrated' power in the reference band, absolute rms^2 normalization,
+    ## not Poisson-noise-subtracted
+    ref_var = norm_ref * delta_freq
 
-    ## Poisson noise levels for absolute rms normalization
+    ## 'Integrated' Poisson noise levels for absolute rms normalization
     ## Equation in text just below eqn 14 in Uttley et al 2014, p 18
-    noise_rms_ci = 2.0 * mean_rate_ci * delta_freq
-    noise_rms_ref = 2.0 * mean_rate_ref * delta_freq
+    integ_noise_rms_ci = Pnoise_ci * meta_dict['df']
+    integ_noise_rms_ref = Pnoise_ref * meta_dict['df']
+    temp1 = covariance_spectrum ** 2 * integ_noise_rms_ref
+    temp2 = ref_var * integ_noise_rms_ci
+    temp3 = integ_noise_rms_ci * integ_noise_rms_ref
 
-    temp1 = covariance_spectrum ** 2 * noise_rms_ref
-    temp2 = ref_var * noise_rms_ci
-    temp3 = noise_rms_ci * noise_rms_ref
-
-    # print abs_ref
-    # print np.shape(temp1)
-    # print np.shape(temp2)
-    # print np.shape(temp3)
-    # print (temp1 + temp2 + temp3) / (4.0 * meta_dict['n_seg'] * n_freq_bins * ref_var)
     with np.errstate(all='ignore'):
         covariance_err = np.sqrt((temp1 + temp2 + temp3) /
-                (4.0 * meta_dict['n_seg'] * n_freq_bins * ref_var))
-
-    # print np.shape(covariance_err)
-    # print covariance_err[1:5]
+                (2.0 * meta_dict['n_seg'] * n_freq_bins *
+                (ref_var - integ_noise_rms_ref)))
 
     ##########
     ## Output
@@ -626,7 +613,6 @@ def main(in_file, out_file, prefix="--", plot_ext="eps",
     ## Plot (in XSPEC)
     ###################
 
-    # print rsp_matrix
     plot_in_xspec(meta_dict, out_file, rsp_matrix)
 
 
