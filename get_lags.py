@@ -42,7 +42,7 @@ from matplotlib.ticker import ScalarFormatter
 import tools  ## in https://github.com/abigailStev/whizzy_scripts
 
 __author__ = "Abigail Stevens <A.L.Stevens at uva.nl>"
-__year__ = "2015"
+__year__ = "2015-2016"
 
 
 ################################################################################
@@ -311,8 +311,8 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
     # 	print np.max(tlag)
     # 	ax.set_ylim(-0.3, 0.3)
     # 	ax.set_ylim(-6, 6)
-    ax.tick_params(axis='x', labelsize=18)
-    ax.tick_params(axis='y', labelsize=18)
+    ax.tick_params(axis='x', labelsize=20)
+    ax.tick_params(axis='y', labelsize=20)
     title = "Lag-frequency spectrum, %s, channels %d - %d" % (prefix, lo_energy,
                                                               up_energy)
     ax.set_title(title, fontproperties=font_prop)
@@ -365,7 +365,7 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     Nothing, but saves a plot to '*_lag-energy.[plot_ext]'.
 
     """
-    font_prop = font_manager.FontProperties(size=18)
+    font_prop = font_manager.FontProperties(size=20)
     energy_list = [np.mean([x, y]) for x,y in tools.pairwise(energies_tab)]
     energy_err = [np.abs(a-b) for (a,b) in zip(energy_list, energies_tab[0:-1])]
     e_chans = np.arange(0, detchans)
@@ -401,9 +401,9 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     #               fontproperties=font_prop)
     # ax.set_xlim(1.5, 25.5)
 
-    ax.hlines(0.0, 3, 21, linestyle='dashed', lw=2, color='gray')
+    ax.hlines(0.0, 3, 20.5, linestyle='dashed', lw=2, color='black')
     ax.errorbar(energy_list[2:26], tlag[2:26], xerr=energy_err[2:26],
-            yerr=err_tlag[2:26], ls='none', marker='o', ms=5, mew=2,
+            yerr=err_tlag[2:26], ls='none', marker='o', ms=10, mew=2,
             mec='black', mfc='black', ecolor='black', elinewidth=2, capsize=0)
 
     # ax.errorbar(energy_list[5:200], tlag[5:200], xerr=energy_err[5:200], yerr=err_tlag[5:200], ls='none',
@@ -432,8 +432,8 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     # ax.set_ylim(1.3 * np.min(tlag[2:25]), 1.30 * np.max(tlag[2:25]))
     ax.set_ylim(-0.01, 0.017)
     # ax.set_ylim(-0.4, 0.5)
-    ax.tick_params(axis='x', labelsize=18)
-    ax.tick_params(axis='y', labelsize=18)
+    ax.tick_params(axis='x', labelsize=20)
+    ax.tick_params(axis='y', labelsize=20)
     title = "Lag-energy spectrum, %s, %.2f - %.2f Hz" % (prefix, lo_freq,
                                                          up_freq)
     # ax.set_title(title, fontproperties=font_prop)
@@ -505,6 +505,7 @@ def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
     return n_squared
 
 
+################################################################################
 def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
         mean_rate_ref, meta_dict, n_range):
     """
