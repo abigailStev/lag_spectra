@@ -305,8 +305,8 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
 
     # 	ax.set_ylabel('Phase lag (radians)', fontproperties=font_prop)
     ax.set_xlim(lo_freq, up_freq)
-    ax.set_ylim(-0.1, 0.1)
-    # 	ax.set_ylim(1.3*np.min(tlag), 1.30*np.max(tlag))
+    # ax.set_ylim(-0.1, 0.1)
+    ax.set_ylim(1.3*np.min(tlag), 1.30*np.max(tlag))
     # 	print np.min(tlag)
     # 	print np.max(tlag)
     # 	ax.set_ylim(-0.3, 0.3)
@@ -320,7 +320,7 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
     plt.savefig(plot_file)
     # plt.show()
     plt.close()
-    # subprocess.call(['open', plot_file])
+    subprocess.call(['open', plot_file])
 
 
 ################################################################################
@@ -366,8 +366,11 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
 
     """
     font_prop = font_manager.FontProperties(size=20)
-    energy_list = [np.mean([x, y]) for x,y in tools.pairwise(energies_tab)]
-    energy_err = [np.abs(a-b) for (a,b) in zip(energy_list, energies_tab[0:-1])]
+    energy_list = []
+    energy_err = []
+    if energies_tab is not None:
+        energy_list = [np.mean([x, y]) for x,y in tools.pairwise(energies_tab)]
+        energy_err = [np.abs(a-b) for (a,b) in zip(energy_list, energies_tab[0:-1])]
     e_chans = np.arange(0, detchans)
 
     plot_file = out_root + "_lag-energy." + plot_ext
@@ -401,47 +404,61 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     #               fontproperties=font_prop)
     # ax.set_xlim(1.5, 25.5)
 
-    ax.hlines(0.0, 3, 20.5, linestyle='dashed', lw=2, color='black')
-    ax.errorbar(energy_list[2:26], tlag[2:26], xerr=energy_err[2:26],
-            yerr=err_tlag[2:26], ls='none', marker='o', ms=10, mew=2,
-            mec='black', mfc='black', ecolor='black', elinewidth=2, capsize=0)
 
-    # ax.errorbar(energy_list[5:200], tlag[5:200], xerr=energy_err[5:200], yerr=err_tlag[5:200], ls='none',
+    print energy_list
+    if len(energy_list) > 0:
+        ax.hlines(0.0, 3, 20.5, linestyle='dashed', lw=2, color='black')
+
+        ax.errorbar(energy_list[2:26], tlag[2:26], xerr=energy_err[2:26],
+                yerr=err_tlag[2:26], ls='none', marker='o', ms=10, mew=2,
+                mec='black', mfc='black', ecolor='black', elinewidth=2,
+                capsize=0)
+        ax.set_xlim(3,21)
+        ax.set_xlabel('Energy (keV)', fontproperties=font_prop)
+        ax.set_xscale('log')
+        x_maj_loc = [5,10,20]
+        ax.set_xticks(x_maj_loc)
+        ax.xaxis.set_major_formatter(ScalarFormatter())
+
+    else:
+        ax.hlines(0.0, e_chans[0], e_chans[-1], linestyle='dashed', lw=2,
+                color='black')
+
+        ax.errorbar(e_chans, tlag, yerr=err_tlag, ls='none', marker='o', ms=10,
+                mew=2, mec='black', mfc='black', ecolor='black', elinewidth=2,
+                capsize=0)
+        ax.set_xlabel('Energy channel', fontproperties=font_prop)
+
+    # ax.errorbar(energy_list[5:200], tlag[5:200], xerr=energy_err[5:200],
+    #       yerr=err_tlag[5:200], ls='none',
     #         marker='o', ms=5, mew=2, mec='black', mfc='black', ecolor='black',
     #         elinewidth=2, capsize=0)
     # ax.errorbar(energy_list, phase, xerr=energy_err, yerr=err_phase, ls='none',
     #         marker='+', ms=8, mew=2, mec='black', ecolor='black', elinewidth=2,
     #         capsize=0)
 
-    ax.set_xlabel('Energy (keV)', fontproperties=font_prop)
-    ax.set_xlim(3,21)
-    # ax.set_xlim(0.3, 10)
-    ax.set_xscale('log')
-    x_maj_loc = [5,10,20]
-    y_maj_loc = [-0.005, 0, 0.005, 0.01, 0.015]
-    ax.set_xticks(x_maj_loc)
-    ax.set_yticks(y_maj_loc)
+    # ax.set_ylim(-0.01, 0.017)
+    # ax.set_ylim(1.3 * np.min(tlag[2:25]), 1.30 * np.max(tlag[2:25]))
+
+    # y_maj_loc = [-0.005, 0, 0.005, 0.01, 0.015]
+    # ax.set_yticks(y_maj_loc)
     xLocator = MultipleLocator(1)  ## loc of minor ticks on x-axis
-    yLocator = MultipleLocator(0.001)  ## loc of minor ticks on y-axis
+    # yLocator = MultipleLocator(0.001)  ## loc of minor ticks on y-axis
     ax.xaxis.set_minor_locator(xLocator)
-    ax.yaxis.set_minor_locator(yLocator)
-    ax.xaxis.set_major_formatter(ScalarFormatter())
+    # ax.yaxis.set_minor_locator(yLocator)
 
     ax.set_ylabel('Time lag (s)', fontproperties=font_prop)
     # ax.set_ylabel('Phase lag (radians)', fontproperties=font_prop)
-    # ax.set_ylim(1.3 * np.min(tlag[2:25]), 1.30 * np.max(tlag[2:25]))
-    ax.set_ylim(-0.01, 0.017)
-    # ax.set_ylim(-0.4, 0.5)
     ax.tick_params(axis='x', labelsize=20)
     ax.tick_params(axis='y', labelsize=20)
     title = "Lag-energy spectrum, %s, %.2f - %.2f Hz" % (prefix, lo_freq,
                                                          up_freq)
-    # ax.set_title(title, fontproperties=font_prop)
+    ax.set_title(title, fontproperties=font_prop)
 
     plt.savefig(plot_file)
     # 	plt.show()
     plt.close()
-    # subprocess.call(['open', plot_file])
+    subprocess.call(['open', plot_file])
 
 ################################################################################
 def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
@@ -868,6 +885,7 @@ def main(in_file, out_file, energies_file, plot_root, prefix="--",
     """
 
     energies_tab = np.loadtxt(energies_file)
+    # energies_tab = []
 
     #######################################################
     ## Get analysis constants and data from the input file
