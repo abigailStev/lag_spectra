@@ -17,9 +17,9 @@ import matplotlib.font_manager as font_manager
 from matplotlib.ticker import MultipleLocator
 from matplotlib.ticker import ScalarFormatter
 from datetime import datetime
+import matplotlib.colors as colors
 
 import tools  ## in https://github.com/abigailStev/whizzy_scripts
-# import get_lags as lags
 
 __author__ = 'Abigail Stevens <A.L.Stevens at uva.nl>'
 __year__ = '2015'
@@ -60,14 +60,20 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
 
     """
 
-    colours = ["blue",
-               "green",
-               "magenta",
+    colours = [colors.cnames['darkblue'],
+               colors.cnames['darkviolet'],
+               colors.cnames['coral'],
                "black"]
 
-    markers = ['d',
+    # colours = [colors.cnames['darkred'],
+    #            colors.cnames['darkcyan'],
+    #            colors.cnames['deeppink'],
+    #            "black"]
+
+    markers = ['^',
                'x',
                's',
+               # '^',
                'o']
 
     #######################
@@ -120,25 +126,32 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
             tlag_err = np.delete(tlag_err, 10)
 
             if labels[i].lower() == "data":
-                print "In Here!"
-
-
                 ax.errorbar(energy_list[2:26], tlag[2:26],
                         xerr=energy_err[2:26], yerr=tlag_err[2:26], ls='none',
-                        marker=markers[i], ms=10, mew=2, mec=colours[i],
-                        mfc=colours[i], ecolor=colours[i], elinewidth=3,
+                        marker='o', ms=10, mew=2, mec='black',
+                        mfc='black', ecolor='black', elinewidth=3,
                         capsize=0, label=labels[i])
 
             else:
-                ax.errorbar(energy_list[2:26], tlag[2:26],
-                        xerr=energy_err[2:26], yerr=tlag_err[2:26], lw=3,
-                        drawstyle='steps-mid', marker=markers[i], ms=8, mew=2, mec=colours[i], color=colours[i], ecolor=colours[i],
-                        elinewidth=3, capsize=0, label=labels[i])
+                if markers[i] == 'x':
+                    ax.errorbar(energy_list[2:26], tlag[2:26],
+                            xerr=energy_err[2:26], yerr=tlag_err[2:26], lw=3,
+                            drawstyle='steps-mid', marker=markers[i], ms=11,
+                            mec=colours[i], color=colours[i], fillstyle='none',
+                            mew=2, ecolor=colours[i], elinewidth=3, capsize=0,
+                            label=labels[i])
+                else:
+                    ax.errorbar(energy_list[2:26], tlag[2:26],
+                            xerr=energy_err[2:26], yerr=tlag_err[2:26], lw=3,
+                            drawstyle='steps-mid', marker=markers[i], ms=8,
+                            mec=colours[i], color=colours[i], fillstyle='none',
+                             mew=2, ecolor=colours[i], elinewidth=3, capsize=0,
+                            label=labels[i])
 
         else:
             ax.errorbar(energy_list, tlag, xerr=energy_err,
                     yerr=tlag_err, ls='none', marker=markers[i], ms=10, mew=2,
-                    mec=colours[i], mfc=colours[i], ecolor=colours[i],
+                    mec=colours[i], fillstyle='none', ecolor=colours[i],
                     elinewidth=2, capsize=0, label=labels[i])
         i += 1
 
@@ -167,22 +180,26 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
     # ax.set_ylabel('Phase lag (radians)', fontproperties=font_prop)
     ax.set_ylim(-0.01, 0.017)
     # ax.set_ylim(-0.4, 0.5)
-    ax.tick_params(axis='x', labelsize=18)
-    ax.tick_params(axis='y', labelsize=18)
+    ax.tick_params(axis='x', labelsize=20)
+    ax.tick_params(axis='y', labelsize=20)
     # ax.set_title("Lag-energy spectrum", fontproperties=font_prop)
 
     ## The following legend code was found on stack overflow I think
-    legend = ax.legend(loc='upper left')
-    for label in legend.get_texts():
-        label.set_fontsize(18)
-    for label in legend.get_lines():
-        label.set_linewidth(2)  # the legend line width
+    # legend = ax.legend(loc='upper left')
+    # for label in legend.get_texts():
+    #     label.set_fontsize(18)
+    # for label in legend.get_lines():
+    #     label.set_linewidth(2)  # the legend line width
 
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, loc='upper left', fontsize=20,
+            borderpad=0.5, labelspacing=0.5, borderaxespad=0.5)
+    ax.text(18, -0.008, 'a', fontsize=36)
     plt.savefig(plot_file)
     # 	plt.show()
     plt.close()
     subprocess.call(['open', plot_file])
-    subprocess.call(['cp', plot_file, \
+    subprocess.call(['cp', plot_file,
             "/Users/abigailstevens/Dropbox/Research/CCF_paper1/"])
 
 
@@ -197,77 +214,32 @@ if __name__ == "__main__":
     args = parser.parse_args()
     prefix = args.prefix
 
-    # ## Get necessary information and data from the input file
-    # freq, cs_avg, power_ci, power_ref, dt, n_bins, DETCHANS, num_seconds, \
-    #         num_seg, mean_rate_ci, mean_rate_ref, evt_list = lags.get_inputs(in_file)
-    #
-    # #########################################
-    # ## Computing the lags of the fundamental
-    # #########################################
-    #
-    # f_phase_1, f_err_phase_1, f_tlag_1, f_err_tlag_1, e_phase_1, e_err_phase_1, \
-    #         e_tlag_1, e_err_tlag_1 = lags.compute_lags(freq, cs_avg, power_ci, \
-    #         power_ref, dt, n_bins, DETCHANS, num_seconds, num_seg, mean_rate_ci, \
-    #         mean_rate_ref, lo_freq, up_freq, lo_energy, up_energy)
-    #
-    # #########################################
-    # ## Writing the output
-    # #########################################
-    #
-    # # lags.fits_out(out_file, in_file, evt_list, dt, n_bins, num_seg, DETCHANS,
-    # #          lo_freq, up_freq, lo_energy, up_energy, mean_rate_ci,
-    # #          mean_rate_ref, freq, f_phase_1, f_err_phase_1, f_tlag_1, f_err_tlag_1,
-    # #          e_phase_1, e_err_phase_1, e_tlag_1, e_err_tlag_1)
-    #
-    #
-    # ###########################################
-    # ## Computing the lags of only the harmonic
-    # ###########################################
-    #
-    #
-    # in_file = sim_dir + "/FAKE-" + prefix + "_150722_nopoiss_cs.fits"
-    #
-    # ## Get necessary information and data from the input file
-    # freq, cs_avg, power_ci, power_ref, dt, n_bins, DETCHANS, num_seconds, \
-    #         num_seg, mean_rate_ci, mean_rate_ref, evt_list = lags.get_inputs(in_file)
-    #
-    # f_phase_2, f_err_phase_2, f_tlag_2, f_err_tlag_2, e_phase_2, e_err_phase_2, \
-    #         e_tlag_2, e_err_tlag_2 = lags.compute_lags(freq, cs_avg, power_ci, \
-    #         power_ref, dt, n_bins, DETCHANS, num_seconds, num_seg, mean_rate_ci, \
-    #         mean_rate_ref, lo_freq, up_freq, lo_energy, up_energy)
-    #
-    # ###########################################################
-    # ## Computing the lags of both the fundamental and harmonic
-    # ###########################################################
-    #
-    # ## Get necessary information and data from the input file
-    # freq, cs_avg, power_ci, power_ref, dt, n_bins, DETCHANS, num_seconds, \
-    #         num_seg, mean_rate_ci, mean_rate_ref, evt_list = lags.get_inputs(in_file)
-    #
-    # f_phase_3, f_err_phase_3, f_tlag_3, f_err_tlag_3, e_phase_3, e_err_phase_3, \
-    #         e_tlag_3, e_err_tlag_3 = lags.compute_lags(freq, cs_avg, power_ci, \
-    #         power_ref, dt, n_bins, DETCHANS, num_seconds, num_seg, mean_rate_ci, \
-    #         mean_rate_ref, lo_freq, up_freq, lo_energy, up_energy)
-
     lag_dir = HOME_DIR + "/Dropbox/Research/lag_spectra/out_lags/" + prefix
     sim_dir = HOME_DIR + "/Dropbox/Research/simulate/out_sim/" + prefix
-    plot_root = lag_dir + "/" + prefix + "_151204_t64_64sec_overpl_lag"
 
-    # in_file_list = [lag_dir + "/" + prefix + "_151124_t64_64sec_adj_lag.fits",
-    # 				lag_dir + "/" + prefix + "_150814_t64_64sec_adj_lag.fits"]
+    plot_root = lag_dir + "/" + prefix + "_151204_t64_64sec_overpl"
 
-    in_file_list = [sim_dir + "/bootstrapped/" + prefix + "_151204_1BB-FS-G-Tin-fzs-fzNbb_lag.fits",
-    				sim_dir + "/bootstrapped/" + prefix + "_151204_2BB-FS-G-kT-fzs-fzNbb_lag.fits",
-                    sim_dir + "/" + prefix + "_151204_1BB-FS-G_lag.fits",
+    in_file_list = [sim_dir + "/bootstrapped/" + prefix + \
+                        "_151204_1BB-FS-G-Tin-fzs-fzNbb_lag.fits",
+    				sim_dir + "/bootstrapped/" + prefix + \
+                        "_151204_2BB-FS-G-kT-fzs-fzNbb8857-2_lag.fits",
+    				sim_dir + "/bootstrapped/" + prefix + \
+                        "_151204_pBB-FS-G-p-fzs-fzNbb_lag.fits",
                     lag_dir + "/" + prefix + "_151204_t64_64sec_adj_lag.fits"]
-    				
-    # labels = [r"PL norm & index, $\chi^{2}=165.8$",
-    #           r"+ iron line energy, $\chi^{2}=144.4$",
-    #           # r"+ iron line norm, $\chi^{2}=78.0$",
-    #           r"+ BB temp, $\chi^{2}=37.8$",
+
+    labels = ["Model 1", "Model 2", "Model 3", "Data"]
+
+    # plot_root = lag_dir + "/" + prefix + "_151204_t64_64sec_overpl_bad"
+    #
+    # in_file_list = [sim_dir + "/" + prefix + "_151204_1BB-FS-G_lag.fits",
+    # 				sim_dir + "/" + prefix + "_151204_1BB-FS-G-E-fzs_lag.fits",
+    # 				sim_dir + "/" + prefix + "_151204_1BB-FS-G-NE-fzs_lag.fits",
+    #                 lag_dir + "/" + prefix + "_151204_t64_64sec_adj_lag.fits"]
+    #
+    # labels = [r"$\Gamma$, $F_{scatt}$",
+    #           r"$\Gamma$, $F_{scatt}$, $E_{line}$",
+    #           r"$\Gamma$, $F_{scatt}$, $N_{line}$",
     #           "Data"]
-    # labels = ["New", "Old"]
-    labels = ["Model 1", "Model 2", "Only PL", "Data"]
 
     ################################################
     ## Calls method above to actually make the plot
