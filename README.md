@@ -36,7 +36,7 @@ Pull requests are welcome!
 
 ## License
 
-All code is Copyright 2015 The Authors, and is distributed under the MIT 
+All code is Copyright 2015-2016 The Authors, and is distributed under the MIT 
 Licence. See LICENSE for details. If you are interested in the further 
 development of lag_spectra, please [get in touch via the issues]
 (https://github.com/abigailstev/lag_spectra/issues)!
