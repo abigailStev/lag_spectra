@@ -575,9 +575,10 @@ def compute_coherence(cross_spec, ci, ref, meta_dict, n_range):
         Dictionary of meta-parameters needed for analysis.
 
     n_range : int
-        Number of bins averaged over for lags. Energy bins for frequency lags,
-        frequency bins for energy lags. Same as K in equations in Section 2 of
-        Uttley et al. 2014.
+        Number of frequency bins averaged over per new frequency bin for lags.
+        For energy lags, this is the number of frequency bins averaged over. For
+        frequency lags not re-binned in frequency, this is 1. Same as K in
+        equations in Section 2 of Uttley et al. 2014.
 
     Returns
     -------
@@ -631,9 +632,10 @@ def get_phase_err(cs_avg, ci, ref, meta_dict, n_range):
         Dictionary of meta-paramters needed for analysis.
 
     n_range : int
-        Number of bins averaged over for lags. Energy bins for frequency lags,
-        frequency bins for energy lags. Same as K in equations in Section 2 of
-        Uttley et al. 2014.
+        Number of frequency bins averaged over per new frequency bin for lags.
+        For energy lags, this is the number of frequency bins averaged over. For
+        frequency lags not re-binned in frequency, this is 1. Same as K in
+        equations in Section 2 of Uttley et al. 2014.
 
     Returns
     -------
