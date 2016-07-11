@@ -5,7 +5,7 @@ reference energy band from the average cross spectrum. Can average over
 frequency and over energy.
 
 Reads from a FITS file where frequency, raw cross spectrum, raw power spectra of
-channels of interest, and raw power spectrum of reference band are saved as an
+channels of interest, and raw power spectrum of reference band are saved in an
 astropy table in FITS extension 1. Header info is also in extension 1.
 
 Files created
@@ -49,9 +49,10 @@ __year__ = "2015-2016"
 def get_inputs(in_file):
     """
     Gets cross spectrum, interest bands power spectra, reference band power
-    spectrum, and necessary constants from the input FITS file. Constants come
-    from header of extension 0, cross spectrum in table of extension 1, power of
-    interest bands in extension 2, power of reference band in extension 3.
+    spectrum, and necessary constants from the input FITS file. Data is
+    structured as an astropy table in FITS extension 1 with with "FREQUENCY",
+    "CROSS", "POWER_REF", and "POWER_CI". The cross-spectrum and power spectra
+    should be raw, i.e. un-normalized and not noise-subtracted.
 
     2-D arrays of cross spectrum and interest bands were flattened (and are
     reshaped here)'C-style'.
@@ -59,9 +60,9 @@ def get_inputs(in_file):
     Parameters
     ----------
     in_file : str
-        The file "*_cs.fits" from cross_correlation/ccf.py. Has constants for
-        meta_dict in ext 0, cross spectrum in ext 1, power of chans of interest
-        in ext 2, and power of reference band in ext 3.
+        The file "*_cs.fits" from cross_correlation/ccf.py. Data is structured
+        as an astropy table in FITS extension 1 with "FREQUENCY", "CROSS",
+        "POWER_REF", and "POWER_CI".
 
     Returns
     -------
@@ -287,6 +288,7 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
     """
 
     font_prop = font_manager.FontProperties(size=20)
+    xLocator = MultipleLocator(0.2)  ## loc of minor ticks on x-axis
 
     plot_file = out_root + "_lag-freq." + plot_ext
     print "Lag-frequency spectrum: %s" % plot_file
@@ -305,14 +307,19 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
 
     # 	ax.set_ylabel('Phase lag (radians)', fontproperties=font_prop)
     ax.set_xlim(lo_freq, up_freq)
-    # ax.set_ylim(-0.1, 0.1)
-    ax.set_ylim(1.3*np.min(tlag), 1.30*np.max(tlag))
+    ax.set_ylim(-0.04, 0.04)
+    # ax.set_ylim(1.3*np.min(tlag), 1.30*np.max(tlag))
     # 	print np.min(tlag)
     # 	print np.max(tlag)
     # 	ax.set_ylim(-0.3, 0.3)
     # 	ax.set_ylim(-6, 6)
+    ax.xaxis.set_minor_locator(xLocator)
     ax.tick_params(axis='x', labelsize=20)
     ax.tick_params(axis='y', labelsize=20)
+    ax.tick_params(which='major', width=1.5, length=7)
+    ax.tick_params(which='minor', width=1.5, length=4)
+    for axis in ['top', 'bottom', 'left', 'right']:
+        ax.spines[axis].set_linewidth(1.5)
     title = "Lag-frequency spectrum, %s, channels %d - %d" % (prefix, lo_energy,
                                                               up_energy)
     ax.set_title(title, fontproperties=font_prop)
@@ -320,7 +327,7 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq, phase, err_phase, tlag, \
     plt.savefig(plot_file)
     # plt.show()
     plt.close()
-    subprocess.call(['open', plot_file])
+    # subprocess.call(['open', plot_file])
 
 
 ################################################################################
@@ -366,6 +373,7 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
 
     """
     font_prop = font_manager.FontProperties(size=20)
+
     energy_list = []
     energy_err = []
     if energies_tab is not None:
@@ -405,7 +413,7 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     # ax.set_xlim(1.5, 25.5)
 
 
-    print energy_list
+    # print energy_list
     if len(energy_list) > 0:
         ax.hlines(0.0, 3, 20.5, linestyle='dashed', lw=2, color='black')
 
@@ -437,15 +445,19 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     #         marker='+', ms=8, mew=2, mec='black', ecolor='black', elinewidth=2,
     #         capsize=0)
 
-    # ax.set_ylim(-0.01, 0.017)
+    ax.set_ylim(-0.01, 0.017)
     # ax.set_ylim(1.3 * np.min(tlag[2:25]), 1.30 * np.max(tlag[2:25]))
 
     # y_maj_loc = [-0.005, 0, 0.005, 0.01, 0.015]
     # ax.set_yticks(y_maj_loc)
     xLocator = MultipleLocator(1)  ## loc of minor ticks on x-axis
-    # yLocator = MultipleLocator(0.001)  ## loc of minor ticks on y-axis
+    yLocator = MultipleLocator(0.001)  ## loc of minor ticks on y-axis
     ax.xaxis.set_minor_locator(xLocator)
-    # ax.yaxis.set_minor_locator(yLocator)
+    ax.yaxis.set_minor_locator(yLocator)
+    ax.tick_params(which='major', width=1.5, length=7)
+    ax.tick_params(which='minor', width=1.5, length=4)
+    for axis in ['top', 'bottom', 'left', 'right']:
+        ax.spines[axis].set_linewidth(1.5)
 
     ax.set_ylabel('Time lag (s)', fontproperties=font_prop)
     # ax.set_ylabel('Phase lag (radians)', fontproperties=font_prop)
@@ -453,12 +465,13 @@ def plot_lag_energy(out_root, energies_tab, plot_ext, prefix, phase, err_phase,
     ax.tick_params(axis='y', labelsize=20)
     title = "Lag-energy spectrum, %s, %.2f - %.2f Hz" % (prefix, lo_freq,
                                                          up_freq)
-    ax.set_title(title, fontproperties=font_prop)
+    # ax.set_title(title, fontproperties=font_prop)
 
     plt.savefig(plot_file)
     # 	plt.show()
     plt.close()
     subprocess.call(['open', plot_file])
+
 
 ################################################################################
 def bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref, meta_dict,
@@ -560,9 +573,10 @@ def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
         Dictionary of meta-paramters needed for analysis.
 
     n_range : int
-        Number of bins averaged over for lags. Energy bins for frequency lags,
-        frequency bins for energy lags. Same as K in equations in Section 2 of
-        Uttley et al. 2014.
+        Number of frequency bins averaged over per new frequency bin for lags.
+        For energy lags, this is the number of frequency bins averaged over. For
+        frequency lags not re-binned in frequency, this is 1. Same as K in
+        equations in Section 2 of Uttley et al. 2014.
 
     Returns
     -------
@@ -580,10 +594,10 @@ def compute_coherence(cross_spec, power_ci, power_ref, mean_rate_ci,
     cs_bias = bias_term(power_ci, power_ref, mean_rate_ci, mean_rate_ref,
             meta_dict, n_range)
 
-    temp_1 = power_ci * power_ref
+    powers = power_ci * power_ref
     temp_2 = cross_spec * np.conj(cross_spec) - cs_bias
     with np.errstate(all='ignore'):
-        coherence = np.where(temp_1 != 0, temp_2 / temp_1, 0)
+        coherence = np.where(powers != 0, temp_2 / powers, 0)
     # print "Coherence shape:", np.shape(coherence)
     # print coherence
     return np.real(coherence)
@@ -626,9 +640,10 @@ def get_phase_err(cs_avg, power_ci, power_ref, mean_rate_ci, mean_rate_ref,
         Dictionary of meta-paramters needed for analysis.
 
     n_range : int
-        Number of bins averaged over for lags. Energy bins for frequency lags,
-        frequency bins for energy lags. Same as K in equations in Section 2 of
-        Uttley et al. 2014.
+        Number of frequency bins averaged over per new frequency bin for lags.
+        For energy lags, this is the number of frequency bins averaged over. For
+        frequency lags not re-binned in frequency, this is 1. Same as K in
+        equations in Section 2 of Uttley et al. 2014.
 
     Returns
     -------
@@ -763,7 +778,6 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
     ## Averaging over energies
     ###########################
 
-    e_span = up_energy - lo_energy + 1  ## including both ends
     erange_cs = np.mean(cs_avg[:, lo_energy:up_energy + 1], axis=1)
     erange_pow_ci = np.mean(power_ci[:, lo_energy:up_energy + 1], axis=1)
     erange_pow_ref = power_ref
@@ -779,7 +793,7 @@ def compute_lags(freq, cs_avg, power_ci, power_ref, meta_dict, mean_rate_ci,
     # print np.shape(f_phase)
     f_err_phase = get_phase_err(erange_cs, erange_pow_ci, erange_pow_ref,
             np.mean(mean_rate_ci[lo_energy:up_energy + 1]), mean_rate_ref,
-            meta_dict, e_span)
+            meta_dict, 1.)
     f_tlag = phase_to_tlags(f_phase, freq)
     f_err_tlag = phase_to_tlags(f_err_phase, freq)
 
@@ -977,7 +991,7 @@ if __name__ == "__main__":
     parser.add_argument('--ue', dest='up_energy', type=tools.type_positive_int,
             default=26, help="The upper bound of the energy channel range to "\
             "average the frequency lags over and plot the energy lags in, "\
-            "inclusive, in detector energy channels. [26]")
+            "inclusive, in detector energy channels. [25]")
 
     args = parser.parse_args()
 
