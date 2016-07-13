@@ -11,6 +11,7 @@ import argparse
 import subprocess
 import numpy as np
 from astropy.io import fits
+from astropy.table import Table
 import os.path
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as font_manager
@@ -18,11 +19,10 @@ from matplotlib.ticker import MultipleLocator
 from matplotlib.ticker import ScalarFormatter
 from datetime import datetime
 import matplotlib.colors as colors
-
-import tools  ## in https://github.com/abigailStev/whizzy_scripts
+import itertools
 
 __author__ = 'Abigail Stevens <A.L.Stevens at uva.nl>'
-__year__ = '2015'
+__year__ = '2015-2016'
 
 HOME_DIR = os.path.expanduser("~")
 DAY = datetime.now().strftime("%y%m%d")
@@ -35,6 +35,25 @@ UP_ENERGY = 20.0
 
 DETCHANS = 64
 
+################################################################################
+def pairwise(iterable):
+    """
+    s -> (s0,s1), (s1,s2), (s2, s3), ...
+    From https://docs.python.org/2/library/itertools.html#recipes
+    Used when reading lines in the file so I can peek at the next line.
+
+    Parameters
+    ----------
+    an iterable, like a list or an open file
+
+    Returns
+    -------
+    The next two items in an iterable, like in the example a few lines above.
+
+    """
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return itertools.izip(a, b)
 
 ################################################################################
 def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
@@ -51,8 +70,8 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
         in_file_list.
 
     plot_root : str
-        Dir + base name of the plot file. _lag-energy.[PLOT_EXT] are appended to
-        it.
+        Dir + base name of the plot file. "_lag-energy.[PLOT_EXT]" are appended
+        to it.
 
     Returns
     -------
@@ -73,7 +92,6 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
     markers = ['^',
                'x',
                's',
-               # '^',
                'o']
 
     #######################
@@ -83,14 +101,13 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
     font_prop = font_manager.FontProperties(size=20)
     energies = np.loadtxt(HOME_DIR + "/Reduced_data/" + prefix +
                           "/energies.txt")
-    energy_list = [np.mean([x, y]) for x,y in tools.pairwise(energies)]
+    energy_list = [np.mean([x, y]) for x,y in pairwise(energies)]
     energy_err = [np.abs(a-b) for (a,b) in zip(energy_list, energies[0:-1])]
 
     plot_file = plot_root + "_lag-energy." + PLOT_EXT
     print "Lag-energy spectrum: %s" % plot_file
 
     e_chans = np.arange(0, DETCHANS)
-
 
     ###################
     ## Making the plot
@@ -108,17 +125,22 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
     i = 0
 
     for in_file in in_file_list:
+
+        # try:
+        #     fits_hdu = fits.open(in_file)
+        # except IOError:
+        #     print "\tERROR: File does not exist: %s" % in_file
+        #     exit()
+        # tlag = fits_hdu[2].data.field('TIME_LAG')
+        # tlag_err = fits_hdu[2].data.field('TIME_LAG_ERR')
+
         try:
-            fits_hdu = fits.open(in_file)
+            lag_table = Table.read(in_file, format='fits', hdu=2)  # HDU 2 for energy lags
         except IOError:
             print "\tERROR: File does not exist: %s" % in_file
             exit()
-
-        # print fits_hdu.info()
-
-        tlag = fits_hdu[2].data.field('TIME_LAG')
-
-        tlag_err = fits_hdu[2].data.field('TIME_LAG_ERR')
+        tlag = lag_table['TIME_LAG']
+        tlag_err = lag_table['TIME_ERR']
 
         ## Deleting the values at energy channel 10 for RXTE PCA event-mode data
         if DETCHANS == 64:
@@ -127,32 +149,34 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
 
             if labels[i].lower() == "data":
                 ax.errorbar(energy_list[2:26], tlag[2:26],
-                        xerr=energy_err[2:26], yerr=tlag_err[2:26], ls='none',
-                        marker='o', ms=10, mew=2, mec='black',
-                        mfc='black', ecolor='black', elinewidth=3,
-                        capsize=0, label=labels[i])
+                            xerr=energy_err[2:26], yerr=tlag_err[2:26],
+                            ls='none', marker='o', ms=10, mew=2, mec='black',
+                            mfc='black', ecolor='black', elinewidth=3,
+                            capsize=0, label=labels[i])
 
             else:
                 if markers[i] == 'x':
                     ax.errorbar(energy_list[2:26], tlag[2:26],
-                            xerr=energy_err[2:26], yerr=tlag_err[2:26], lw=3,
-                            drawstyle='steps-mid', marker=markers[i], ms=11,
-                            mec=colours[i], color=colours[i], fillstyle='none',
-                            mew=2, ecolor=colours[i], elinewidth=3, capsize=0,
-                            label=labels[i])
+                                xerr=energy_err[2:26], yerr=tlag_err[2:26],
+                                lw=3, drawstyle='steps-mid', ls='none', ms=11,
+                                marker=markers[i], mec=colours[i], mew=2,
+                                color=colours[i], fillstyle='none',
+                                ecolor=colours[i], elinewidth=3, capsize=0,
+                                label=labels[i])
                 else:
                     ax.errorbar(energy_list[2:26], tlag[2:26],
-                            xerr=energy_err[2:26], yerr=tlag_err[2:26], lw=3,
-                            drawstyle='steps-mid', marker=markers[i], ms=8,
-                            mec=colours[i], color=colours[i], fillstyle='none',
-                             mew=2, ecolor=colours[i], elinewidth=3, capsize=0,
-                            label=labels[i])
+                                xerr=energy_err[2:26], yerr=tlag_err[2:26],
+                                lw=3, drawstyle='steps-mid', ls='none', ms=8,
+                                mew=2, marker=markers[i], mec=colours[i],
+                                color=colours[i], fillstyle='none',
+                                ecolor=colours[i], elinewidth=3, capsize=0,
+                                label=labels[i])
 
         else:
-            ax.errorbar(energy_list, tlag, xerr=energy_err,
-                    yerr=tlag_err, ls='none', marker=markers[i], ms=10, mew=2,
-                    mec=colours[i], fillstyle='none', ecolor=colours[i],
-                    elinewidth=2, capsize=0, label=labels[i])
+            ax.errorbar(energy_list, tlag, xerr=energy_err, yerr=tlag_err,
+                        ls='none', marker=markers[i], ms=10, mew=2,
+                        mec=colours[i], fillstyle='none', ecolor=colours[i],
+                        elinewidth=2, capsize=0, label=labels[i])
         i += 1
 
     # ax.plot([0,DETCHANS],[0,0], lw=1.5, ls='dashed', c='black')
@@ -182,6 +206,10 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
     # ax.set_ylim(-0.4, 0.5)
     ax.tick_params(axis='x', labelsize=20)
     ax.tick_params(axis='y', labelsize=20)
+    ax.tick_params(which='major', width=1.5, length=7)
+    ax.tick_params(which='minor', width=1.5, length=4)
+    for axis in ['top', 'bottom', 'left', 'right']:
+        ax.spines[axis].set_linewidth(1.5)
     # ax.set_title("Lag-energy spectrum", fontproperties=font_prop)
 
     ## The following legend code was found on stack overflow I think
@@ -194,13 +222,13 @@ def make_plot(in_file_list, labels, plot_root, prefix="GX339-BQPO"):
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles, labels, loc='upper left', fontsize=20,
             borderpad=0.5, labelspacing=0.5, borderaxespad=0.5)
-    ax.text(18, -0.008, 'a', fontsize=36)
+    # ax.text(18, -0.008, 'b', fontsize=36)
     plt.savefig(plot_file)
     # 	plt.show()
     plt.close()
     subprocess.call(['open', plot_file])
-    subprocess.call(['cp', plot_file,
-            "/Users/abigailstevens/Dropbox/Research/CCF_paper1/"])
+    # subprocess.call(['cp', plot_file,
+    #         "/Users/abigailstevens/Dropbox/Academic/Conferences_and_talks/HEAD_Florida2016/"])
 
 
 ################################################################################
@@ -217,29 +245,44 @@ if __name__ == "__main__":
     lag_dir = HOME_DIR + "/Dropbox/Research/lag_spectra/out_lags/" + prefix
     sim_dir = HOME_DIR + "/Dropbox/Research/simulate/out_sim/" + prefix
 
-    plot_root = lag_dir + "/" + prefix + "_151204_t64_64sec_overpl"
+    # plot_root = "/Users/abigailstevens/Dropbox/Academic/Conferences_and_talks/HEAD_NaplesFL2016/GX339_151204_t64_64sec_overpl"
 
-    in_file_list = [sim_dir + "/bootstrapped/" + prefix + \
-                        "_151204_1BB-FS-G-Tin-fzs-fzNbb_lag.fits",
-    				sim_dir + "/bootstrapped/" + prefix + \
-                        "_151204_2BB-FS-G-kT-fzs-fzNbb8857-2_lag.fits",
-    				sim_dir + "/bootstrapped/" + prefix + \
-                        "_151204_pBB-FS-G-p-fzs-fzNbb_lag.fits",
-                    lag_dir + "/" + prefix + "_151204_t64_64sec_adj_lag.fits"]
+    # in_file_list = [HOME_DIR + "/Dropbox/Research/lag_spectra/out_lags/GX339-BQPO/GX339-BQPO_151204_t64_64sec_adj_lag.fits",
+    #                 HOME_DIR + "/Dropbox/Research/lag_spectra/out_lags/GX339-4HzCQPO/GX339-4HzCQPO_160318_t64_64sec_lag.fits"]
+    # labels = ["Type B", "Type C"]
 
-    labels = ["Model 1", "Model 2", "Model 3", "Data"]
+    # plot_root = lag_dir + "/" + prefix + "_151204_t64_64sec_overpl"
+    #
+    # in_file_list = [sim_dir + "/bootstrapped/" + prefix + \
+    #                     "_151204_1BB-FS-G-Tin-fzs-fzNbb_lag.fits",
+    # 				sim_dir + "/bootstrapped/" + prefix + \
+    #                     "_151204_2BB-FS-G-kT-fzs-fzNbb8857-2_lag.fits",
+    # 				sim_dir + "/bootstrapped/" + prefix + \
+    #                     "_151204_pBB-FS-G-p-fzs-fzNbb_lag.fits",
+    #                 lag_dir + "/" + prefix + "_151204_t64_64sec_adj_lag.fits"]
+    #
+    # labels = ["Model 1", "Model 2", "Model 3", "Data"]
 
     # plot_root = lag_dir + "/" + prefix + "_151204_t64_64sec_overpl_bad"
-    #
+
     # in_file_list = [sim_dir + "/" + prefix + "_151204_1BB-FS-G_lag.fits",
     # 				sim_dir + "/" + prefix + "_151204_1BB-FS-G-E-fzs_lag.fits",
     # 				sim_dir + "/" + prefix + "_151204_1BB-FS-G-NE-fzs_lag.fits",
     #                 lag_dir + "/" + prefix + "_151204_t64_64sec_adj_lag.fits"]
-    #
-    # labels = [r"$\Gamma$, $F_{scatt}$",
-    #           r"$\Gamma$, $F_{scatt}$, $E_{line}$",
-    #           r"$\Gamma$, $F_{scatt}$, $N_{line}$",
+
+    # labels = [r"$\Gamma$, $f_{scatt}$",
+    #           r"$\Gamma$, $f_{scatt}$, $E_{line}$",
+    #           r"$\Gamma$, $f_{scatt}$, $N_{line}$",
     #           "Data"]
+
+    plot_root = lag_dir + "/" + prefix + "_160712_t64_64sec_adj_overpl"
+
+    in_file_list = [lag_dir + "/" + prefix + "_160711_t64_64sec-3-10Hz_wh_adj_lag.fits",
+                    lag_dir + "/" + prefix + "_160711_t64_64sec-3-7Hz_adj_lag.fits",
+                    lag_dir + "/" + prefix + "_160712_t64_64sec-7-10Hz_adj_lag.fits"]
+
+    labels = ["3-10 Hz", "3-7 Hz", "7-10 Hz"]
+
 
     ################################################
     ## Calls method above to actually make the plot
