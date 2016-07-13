@@ -40,3 +40,5 @@ python "${code_dir}"/simple_plot_lag-freq.py "${out_base}_lag-freq.fits" \
         --out "${out_base}" --ext "${plot_ext}"
 
 open "${out_base}_lag-freq.${plot_ext}"
+
+tput bel  ## Makes the little bash bell ring, so you know the script is done.
