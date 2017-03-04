@@ -34,7 +34,7 @@ etc.) on the same plot.
 * Phil Uttley (UvA API)
 * Federico Vincentelli (INAF Roma, INAF Brera)
 
-## License
+## Copyright
 
 All code is Copyright 2015-2017 the Authors, and is distributed under the MIT
 Licence. See LICENSE.md for details.
