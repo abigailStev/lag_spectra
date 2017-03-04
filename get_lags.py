@@ -42,11 +42,11 @@ from matplotlib.ticker import ScalarFormatter
 import tools  ## in https://github.com/abigailStev/whizzy_scripts
 
 __author__ = "Abigail Stevens <A.L.Stevens at uva.nl>"
-__year__ = "2015-2016"
+__year__ = "2015-2017"
 
 
 ################################################################################
-def freq_rebin_values(freq, values, rebin_const=1.02):
+def freq_rebin_values(freq, values, rebin_const=1.1):
     """
     Re-bin a set of values in frequency space by some re-binning
     constant (rebin_const > 1).
@@ -62,7 +62,7 @@ def freq_rebin_values(freq, values, rebin_const=1.02):
 
     rebin_const : float, optional
         The constant by which the data were geometrically re-binned.
-        Default = 1.01
+        Default = 1.05
 
     Returns
     -------
@@ -118,6 +118,8 @@ def freq_rebin_values(freq, values, rebin_const=1.02):
         bin_freq = None
         bin_values = None
 
+    # print bin_array
+    # print len(bin_array)
     return rb_freq, rb_values, bin_array
 
 
@@ -395,8 +397,8 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq_lags):
     ax.set_xscale('log')
     # ax.set_yscale('log')
     # 	ax.set_ylabel('Phase lag (radians)', fontproperties=font_prop)
-    ax.set_xlim(freq_lags.meta['LO_FREQ'], freq_lags.meta['UP_FREQ'])
-    ax.set_ylim(-0.04, 0.04)
+    ax.set_xlim(0.1, 10)
+    ax.set_ylim(-0.25, 0.25)
     # ax.set_ylim(1.3*np.min(freq_lags['TIME_LAG']), 1.30*np.max(freq_lags['TIME_LAG']))
     # 	print np.min(freq_lags['TIME_LAG'])
     # 	print np.max(freq_lags['TIME_LAG'])
@@ -409,11 +411,7 @@ def plot_lag_freq(out_root, plot_ext, prefix, freq_lags):
     ax.tick_params(which='minor', width=1.5, length=4)
     for axis in ['top', 'bottom', 'left', 'right']:
         ax.spines[axis].set_linewidth(1.5)
-    title = "Lag-frequency spectrum, %s, channels %d - %d" % (prefix,
-                                                              freq_lags.meta[
-                                                                  'LO_CHAN'],
-                                                              freq_lags.meta[
-                                                                  'UP_CHAN'])
+    title = "Lag-frequency spectrum, %s" % prefix
     ax.set_title(title, fontproperties=font_prop)
 
     plt.savefig(plot_file)
@@ -584,8 +582,12 @@ def bias_term(in_table, n_range):
         Dictionary of meta-parameters needed for analysis.
 
     n_range : int
-        Number of bins that will be averaged together for the lags. Energy bins
-        for frequency lags, frequency bins for energy lags.
+        Number of frequency bins averaged over per new frequency bin for lags.
+        For energy lags, this is the number of frequency bins averaged over. For
+        frequency lags not re-binned in frequency, this is 1. For frequency lags
+        that have been re-binned, this is a 1-D array with ints of the number of
+        old bins in each new bin. Same as K in equations in Section 2 of
+        Uttley et al. 2014. Default=1
 
     Returns
     -------
@@ -613,7 +615,7 @@ def bias_term(in_table, n_range):
 
 
 ################################################################################
-def compute_coherence(in_table, n_range=1):
+def compute_coherence(in_table):
     """
     Compute the raw coherence of the cross spectrum. Coherence equation from
     Uttley et al 2014 eqn 11, bias term equation from footnote 4 on same page.
@@ -643,14 +645,17 @@ def compute_coherence(in_table, n_range=1):
     #     power_ref = np.resize(np.repeat(power_ref, np.shape(power_ci)[1]),
     #             np.shape(power_ci))
 
-    cs_bias = bias_term(in_table, n_range)
+    # cs_bias = bias_term(in_table, n_range)
+    cs_bias = 0  ## Reasonable assumption, most of the time. but still, WARNING.
 
+    # print np.shape(in_table['CROSS'])
+    # print in_table['CROSS']
+    temp_2 = np.abs(in_table['CROSS'])**2 - cs_bias
     powers = in_table['POWER_CI'] * in_table['POWER_REF']
-    temp_2 = in_table['CROSS'] * np.conj(in_table['CROSS']) - cs_bias
     with np.errstate(all='ignore'):
         coherence = np.where(powers != 0, temp_2 / powers, 0)
     # print "Coherence shape:", np.shape(coherence)
-    # print coherence
+    # print np.real(coherence)
     return np.real(coherence)
 
 
@@ -663,7 +668,6 @@ def get_phase_err(in_table, n_range=1):
     Parameters
     ----------
     in_table : Astropy table
-
 
     n_range : int or np.array of ints
         Number of frequency bins averaged over per new frequency bin for lags.
@@ -679,10 +683,10 @@ def get_phase_err(in_table, n_range=1):
     """
 
     # coherence = np.where(a != 0, cs_avg * np.conj(cs_avg) / a, 0)
-    coherence = compute_coherence(in_table, n_range)
+    coherence = compute_coherence(in_table)
 
     with np.errstate(all='ignore'):
-        phase_err = np.sqrt(np.where(coherence != 0, (1 - coherence) /
+        phase_err = np.sqrt(np.where(coherence != 0, np.abs(1 - coherence) /
                 (2 * coherence * n_range * in_table.meta['SEGMENTS']), 0))
 
     return phase_err
@@ -725,73 +729,48 @@ def phase_to_tlags(phase, f):
 ################################################################################
 def calc_freq_lags(in_table):
     """
-    Calculating the frequency lags over an energy range.
+    Calculating the frequency lags.
     See steps in Uttley et al 2014 section 2.2.1.
 
     Parameters
     ----------
-    cs_avg : np.array of complex numbers
-        2-D array of the cross-spectrum averaged together over light curve
-        segments. Only the positive Fourier frequencies.
-        Size = (n_bins/2, detchans).
 
-    :param power_ci:
-    :param power_ref:
-    :param meta_dict:
-    :param lo_chan:
-    :param up_chan:
-    :return:
     """
-    print np.shape(in_table['CROSS'])
-    ###########################
-    ## Averaging over energies
-    ###########################
-
-    erange_cs = np.mean(in_table['CROSS'][:,
-                        in_table.meta['LO_CHAN']:in_table.meta['UP_CHAN']+1],
-                        axis=1)
-    erange_pow_ci = np.mean(in_table['POWER_CI'][:,
-                            in_table.meta['LO_CHAN']:in_table.meta['UP_CHAN']
-                                                     +1], axis=1)
-    erange_pow_ref = in_table['POWER_REF']
 
     ## Re-bin the PSDs and cross-spectrum in frequency
     ## Uttley et al 2014 section 2.2.1 step 4
     rb_freq_cs, rb_cs, bin_cs = freq_rebin_values(in_table['FREQUENCY'],
-                                                  erange_cs)
-    rb_freq_powci, rb_pow_ci, bin_powci = \
-            freq_rebin_values(in_table['FREQUENCY'], erange_pow_ci)
-    rb_freq_powref, rb_pow_ref, bin_powref = \
-            freq_rebin_values(in_table['FREQUENCY'], erange_pow_ref)
+                                                  in_table['LAGF_CS'])
+    rb_freq_pow1, rb_pow_1, bin_pow1 = \
+            freq_rebin_values(in_table['FREQUENCY'], in_table['POWER_1'])
+    rb_freq_pow2, rb_pow_2, bin_pow2 = \
+            freq_rebin_values(in_table['FREQUENCY'], in_table['POWER_2'])
 
-    assert rb_freq_cs.all() == rb_freq_powci.all(), "Something went wrong in re-binning " \
-                                        "for frequency lags."
-    # assert rb_freq_cs == rb_freq_powref, "Something went wrong in re-binning " \
-    #                                      "for frequency lags."
-    # assert bin_cs == bin_powci, "Something went wrong in re-binning for " \
-    #                             "frequency lags."
-    # assert bin_cs == bin_powref, "Something went wrong in re-binning for " \
-    #                              "frequency lags."
+    assert rb_freq_cs.all() == rb_freq_pow1.all(), "Something went wrong in " \
+                                        "re-binning for frequency lags."
+    assert rb_freq_cs.all() == rb_freq_pow2.all(), "Something went wrong in " \
+                                         "re-binning  for frequency lags."
+    assert bin_cs.all() == bin_pow1.all(), "Something went wrong in re-" \
+                                "binning for frequency lags."
+    assert bin_cs.all() == bin_pow2.all(), "Something went wrong in re-" \
+                                 "binning for frequency lags."
 
     rb_table = Table()
     rb_table.meta = in_table.meta
     rb_table['FREQUENCY'] = Column(rb_freq_cs)
     rb_table['CROSS'] = Column(rb_cs)
-    rb_table['POWER_CI'] = Column(rb_pow_ci)
-    rb_table['POWER_REF'] = Column(rb_pow_ref)
+    rb_table['POWER_CI'] = Column(rb_pow_1)
+    rb_table['POWER_REF'] = Column(rb_pow_2)
 
-    rb_table.meta['RATE_CI'] = np.mean(rb_table.meta[ \
-                                           'RATE_CI'][rb_table.meta[ \
-                                           'LO_CHAN']:rb_table.meta[
-                                                          'UP_CHAN'] + 1])
+    # print np.mean(np.abs(rb_table['CROSS'][1:]))
+    # print np.mean(rb_table['POWER_CI'][1:])
+    # print np.mean(rb_table['POWER_REF'][1:])
+
     ############################################
     ## Getting lag and error for frequency lags
     ############################################
 
     ## Negative sign is so that a positive lag is a hard energy lag
-    # f_tlag = phase_to_tlags(f_phase, rb_freq)
-    # f_err_tlag = phase_to_tlags(f_err_phase, rb_freq)
-
 
     freq_lags = Table()
     freq_lags.meta = in_table.meta
